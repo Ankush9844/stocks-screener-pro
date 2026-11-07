@@ -16,7 +16,10 @@ app = FastAPI(title="StockPro (personal)")
 STATIC = Path(__file__).parent / "static"
 _store_lock = threading.Lock()
 _mem: dict = {}
+_jobs: dict = {}            # background screener runs: name -> {"running", "done", "total", "rows", "failed", "started"}
+_jobs_lock = threading.Lock()
 HORIZONS = ("long", "medium", "short")
+WORKERS = 6
 
 
 def clean(o):
@@ -52,17 +55,28 @@ def bench_df():
 
 def analyze(sym: str) -> dict:
     def run():
-        df = data.get_history(sym)
-        if df is None or df.empty or len(df) < 30:
-            raise HTTPException(404, f"No price data for '{sym}'. Check the ticker (NSE: RELIANCE.NS, BSE: RELIANCE.BO, US: us:AAPL).")
-        info = data.get_info(sym)
-        etf = universe.lookup_etf(sym)
-        a = analysis.analyze_etf(df, info, bench_df(), etf) if etf else analysis.analyze_frame(df, info, bench_df())
-        a["symbol"] = sym
-        a["name"] = info.get("name") or (etf or {}).get("name") or sym
-        a.setdefault("kind", "stock")
-        return a
+        try:
+            return _analyze(sym)
+        except HTTPException:
+            raise
+        except Exception as e:
+            if data.rate_limited(e):
+                raise HTTPException(503, "Yahoo Finance is rate-limiting requests right now. Wait a minute and try again.")
+            raise
     return cached(f"an:{sym}", 1800, run)
+
+
+def _analyze(sym: str) -> dict:
+    df = data.get_history(sym)
+    if df is None or df.empty or len(df) < 30:
+        raise HTTPException(404, f"No price data for '{sym}'. Check the ticker (NSE: RELIANCE.NS, BSE: RELIANCE.BO, US: us:AAPL).")
+    info = data.get_info(sym)
+    etf = universe.lookup_etf(sym)
+    a = analysis.analyze_etf(df, info, bench_df(), etf) if etf else analysis.analyze_frame(df, info, bench_df())
+    a["symbol"] = sym
+    a["name"] = info.get("name") or (etf or {}).get("name") or sym
+    a.setdefault("kind", "stock")
+    return a
 
 
 def etf_row(sym: str, a: dict) -> dict:
@@ -81,19 +95,79 @@ def etf_row(sym: str, a: dict) -> dict:
 def row(sym: str, a: dict) -> dict:
     if a.get("kind") == "etf":
         return etf_row(sym, a)
-    s, fv = a["signals"], a["fair_value"]
-    return {"symbol": sym, "name": a["name"], "sector": a["info"].get("sector"), "price": a["price"], "change_1d": a["change_1d"],
-            "pe": a["info"].get("pe"), "pb": a["info"].get("pb"), "roe": a["info"].get("roe"), "market_cap": a["info"].get("market_cap"),
-            "fair_value": fv.get("value"), "upside": fv.get("upside"),
-            "score": a["overall"], "ret_6m": a["tech"].get("ret_6m"), "rsi": a["tech"].get("rsi"), "trend": a["tech"]["trend"],
+    s, fv, i, u = a["signals"], a["fair_value"], a["info"], universe.lookup(sym) or {}
+    return {"symbol": sym, "name": a["name"], "sector": i.get("sector") or u.get("sector"), "industry": u.get("industry") or i.get("industry"),
+            "group": u.get("group"), "price": a["price"], "change_1d": a["change_1d"],
+            "pe": i.get("pe"), "pb": i.get("pb"), "roe": i.get("roe"), "market_cap": i.get("market_cap"), "dividend_yield": i.get("dividend_yield"),
+            "debt_to_equity": i.get("debt_to_equity"), "revenue_growth": i.get("revenue_growth"), "earnings_growth": i.get("earnings_growth"),
+            "consensus": i.get("consensus"), "analysts": i.get("analysts"), "fundamentals_ok": i.get("fundamentals_ok"),
+            "fair_value": fv.get("value"), "upside": fv.get("upside"), "fv_confidence": fv.get("confidence"),
+            "score": a["overall"], "ret_6m": a["tech"].get("ret_6m"), "ret_1y": a["tech"].get("ret_1y"), "rsi": a["tech"].get("rsi"), "trend": a["tech"]["trend"],
             "signals": {k: {"signal": v["signal"], "score": v["score"]} for k, v in s.items()}}
+
+
+# ------------------------------------------------------------------ background screening
+def _run_screen(name: str, syms: list[str], job: dict, extra):
+    def one(sym):
+        try:
+            r = row(sym, analyze(sym))
+        except Exception as e:
+            r = {"symbol": sym, "error": str(e)}
+        with _jobs_lock:
+            (job["failed"] if "error" in r else job["rows"]).append(r["symbol"] if "error" in r else r)
+            job["done"] += 1
+    try:
+        with ThreadPoolExecutor(WORKERS) as ex:
+            list(ex.map(one, syms))
+        if job["failed"] and data.mode() == "live":   # usually Yahoo throttling near the end of a big run: pause, then retry those once
+            time.sleep(10)
+            retry, job["failed"] = list(job["failed"]), []
+            job["done"] -= len(retry)
+            with ThreadPoolExecutor(max(2, WORKERS // 2)) as ex:
+                list(ex.map(one, retry))
+        order = {s: k for k, s in enumerate(syms)}
+        rows = sorted(job["rows"], key=lambda r: order.get(r["symbol"], 1e9))
+        res = {"rows": rows, "failed": list(job["failed"]), "changes": _record_signals(rows), "mode": data.mode(),
+               "as_of": time.strftime("%Y-%m-%d %H:%M"), "seconds": round(time.time() - job["started"])}
+        if extra:
+            res.update(extra(rows))
+        _mem[name] = (time.time(), res)
+    except Exception as e:
+        job["error"] = f"{type(e).__name__}: {e}"
+    finally:
+        job["running"] = False
+
+
+def _screen(name: str, syms: list[str], refresh: bool = False, extra=None, ttl: int = 1800) -> dict:
+    """Screener results for `syms`. The first call starts a background job and returns straight away with the rows done so far
+    plus a `progress` block; the client polls until `progress.running` is false. Finished results are kept for `ttl` seconds."""
+    with _jobs_lock:
+        job = _jobs.get(name)
+        running = bool(job and job["running"])
+    if refresh and not running:   # drop the in-memory analyses and the on-disk price/fundamentals cache, then refetch
+        _mem.pop(name, None)
+        for k in [k for k in _mem if k.startswith("peers:")] + [f"an:{s}" for s in syms]:
+            _mem.pop(k, None)
+        data.invalidate(syms + [data.BENCH])
+    hit = _mem.get(name)
+    if hit and time.time() - hit[0] < ttl:
+        return {**hit[1], "progress": {"done": len(syms), "total": len(syms), "running": False}}
+    with _jobs_lock:
+        job = _jobs.get(name)
+        if not job or not job["running"]:
+            job = _jobs[name] = {"running": True, "done": 0, "total": len(syms), "rows": [], "failed": [], "started": time.time()}
+            threading.Thread(target=_run_screen, args=(name, syms, job, extra), daemon=True).start()
+        snapshot = {"rows": list(job["rows"]), "failed": list(job["failed"]),
+                    "progress": {"done": job["done"], "total": job["total"], "running": job["running"],
+                                 "elapsed": round(time.time() - job["started"]), "error": job.get("error")}}
+    return {**snapshot, "changes": [], "mode": data.mode(), "as_of": time.strftime("%Y-%m-%d %H:%M"), "partial": True}
 
 
 # ------------------------------------------------------------------ status / search
 @app.get("/api/status")
 def status():
     return ok({"mode": data.mode(), "reason": data.mode_reason(), "universe_size": len(universe.load_universe()),
-               "etf_count": len(universe.load_etfs()), "home": str(data.HOME)})
+               "groups": universe.groups(), "etf_count": len(universe.load_etfs()), "home": str(data.HOME)})
 
 
 @app.get("/api/search")
@@ -132,47 +206,18 @@ def _symbol_changes(sym: str) -> list[dict]:
 
 @app.get("/api/screener")
 def screener(refresh: bool = False):
-    if refresh:   # drop both the in-memory analyses and the on-disk price/fundamentals cache, then refetch
-        for k in [k for k in _mem if k.startswith(("an:", "screener", "peers:"))]:
-            _mem.pop(k, None)
-        data.invalidate([u["symbol"] for u in universe.load_universe()] + [data.BENCH])
-
-    def run():
-        syms = [u["symbol"] for u in universe.load_universe()]
-        def one(s):
-            try:
-                return row(s, analyze(s))
-            except Exception as e:  # skip tickers that fail
-                return {"symbol": s, "error": str(e)}
-        with ThreadPoolExecutor(8) as ex:
-            res = list(ex.map(one, syms))
-        rows = [r for r in res if "error" not in r]
-        return {"rows": rows, "failed": [r["symbol"] for r in res if "error" in r], "changes": _record_signals(rows),
-                "mode": data.mode(), "as_of": time.strftime("%Y-%m-%d %H:%M")}
-    return ok(cached("screener", 1800, run))
+    """All stocks in the universe. Runs in the background: poll until progress.running is false."""
+    syms = [u["symbol"] for u in universe.load_universe()]
+    return ok(_screen("screener", syms, refresh))
 
 
 @app.get("/api/etfs")
 def etfs(refresh: bool = False):
-    """ETF screener: returns, risk, liquidity and trend signals for every ETF in the universe."""
+    """ETF screener: returns, risk, liquidity and trend signals for every ETF in the universe (background job, poll like /api/screener)."""
     syms = [e["symbol"] for e in universe.load_etfs()]
-    if refresh:
-        for k in [k for k in _mem if k.startswith("etfs")] + [f"an:{s}" for s in syms]:
-            _mem.pop(k, None)
-        data.invalidate(syms + [data.BENCH])
-
-    def run():
-        def one(s):
-            try:
-                return row(s, analyze(s))
-            except Exception as e:
-                return {"symbol": s, "error": str(e)}
-        with ThreadPoolExecutor(8) as ex:
-            res = list(ex.map(one, syms))
-        rows = [r for r in res if "error" not in r]
-        return {"rows": rows, "failed": [r["symbol"] for r in res if "error" in r], "changes": _record_signals(rows),
-                "categories": sorted({r["category"] for r in rows}), "mode": data.mode(), "as_of": time.strftime("%Y-%m-%d %H:%M")}
-    return ok(cached("etfs", 1800, run))
+    res = _screen("etfs", syms, refresh, extra=lambda rows: {"categories": sorted({r["category"] for r in rows})})
+    res.setdefault("categories", sorted({r["category"] for r in res["rows"]}))
+    return ok(res)
 
 
 # ------------------------------------------------------------------ stock detail
@@ -181,8 +226,9 @@ def stock(symbol: str, days: int = Query(504, ge=30, le=1260)):
     sym = data.normalize(symbol)
     a = analyze(sym)
     df = data.get_history(sym)
-    return ok({**a, "chart": analysis.chart_series(df, days), "mode": data.mode(),
-               "in_universe": universe.lookup(sym) is not None, "history": _symbol_changes(sym)})
+    u = universe.lookup(sym)
+    return ok({**a, "chart": analysis.chart_series(df, days), "mode": data.mode(), "group": (u or {}).get("group"),
+               "in_universe": u is not None, "history": _symbol_changes(sym)})
 
 
 @app.get("/api/financials/{symbol}")
@@ -197,6 +243,13 @@ def financials(symbol: str):
     return ok({**fin, "takeaways": analysis.financial_takeaways(fin, sector)})
 
 
+@app.get("/api/extras/{symbol}")
+def extras(symbol: str):
+    """Earnings dates and surprises, dividend record, holders, analyst consensus, extra ratios and news."""
+    sym = data.normalize(symbol)
+    return ok({**data.get_extras(sym), "kind": "etf" if universe.lookup_etf(sym) else "stock", "mode": data.mode()})
+
+
 @app.get("/api/peers/{symbol}")
 def peers(symbol: str):
     """Same-sector stocks from the screener universe, with sector medians for context."""
@@ -208,18 +261,25 @@ def peers(symbol: str):
     def run():
         pool = universe.load_etfs() if etf else universe.load_universe()
         key = "category" if etf else "sector"
-        cands = [u["symbol"] for u in pool if u[key] == sector and u["symbol"] != sym][:15]
+        cands = [u["symbol"] for u in pool if u[key] == sector and u["symbol"] != sym][:30]
         def one(s):
             try:
                 return row(s, analyze(s))
             except Exception:
                 return None
-        with ThreadPoolExecutor(8) as ex:
+        with ThreadPoolExecutor(WORKERS) as ex:
             rows = [r for r in ex.map(one, cands) if r]
+        ind, label = me["info"].get("industry"), sector
+        if ind and not etf:   # Yahoo's industry is finer than the sector (e.g. "Banks - Regional"): prefer it when there are enough
+            same = [r for r in rows if (_mem.get(f"an:{r['symbol']}") or (0, {}))[1].get("info", {}).get("industry") == ind]
+            if len(same) >= 3:
+                rows, label = same, ind
+        rows = rows[:15]
         def med(k):
             v = [r[k] for r in rows if r.get(k) is not None]
             return float(np.median(v)) if v else None
-        return {"sector": sector, "kind": "etf" if etf else "stock", "peers": sorted(rows, key=lambda r: -(r["score"] or 0)),
+        return {"sector": label, "kind": "etf" if etf else "stock", "peers": sorted(rows, key=lambda r: -(r["score"] or 0)),
+                "pool": len(cands),
                 "median": {k: med(k) for k in ("pe", "pb", "roe", "score", "ret_6m", "upside")}}
     return ok({**cached(f"peers:{sector}:{sym}", 1800, run), "self": row(sym, me)})
 
@@ -234,17 +294,21 @@ def backtest_stock(symbol: str):
 
 
 @app.get("/api/backtest/momentum")
-def backtest_momentum(top_n: int = Query(10, ge=3, le=30), lookback_months: int = Query(6, ge=1, le=12)):
+def backtest_momentum(top_n: int = Query(10, ge=3, le=30), lookback_months: int = Query(6, ge=1, le=12), group: str = ""):
+    """Cross-sectional momentum over one index group (default: the largest group present, i.e. Nifty 50), since 500 ten-year histories are slow."""
+    groups = universe.groups()
+    group = group if group in groups else (groups[0] if groups else "")
+
     def run():
-        syms = [u["symbol"] for u in universe.load_universe()]
-        with ThreadPoolExecutor(8) as ex:
+        syms = [u["symbol"] for u in universe.load_universe() if not group or u["group"] == group]
+        with ThreadPoolExecutor(WORKERS) as ex:
             hs = list(ex.map(lambda s: (s, data.get_history(s, 10)), syms))
         closes = pd.DataFrame({s: h["Close"] for s, h in hs if h is not None and not h.empty})
         res = analysis.backtest_momentum(closes, data.get_history(data.BENCH, 10)["Close"], top_n, lookback_months)
         res["universe_size"] = closes.shape[1]
-        res["mode"] = data.mode()
+        res["group"], res["groups"], res["mode"] = group, groups, data.mode()
         return res
-    return ok(cached(f"bt:{top_n}:{lookback_months}", 3600, run))
+    return ok(cached(f"bt:{group}:{top_n}:{lookback_months}", 3600, run))
 
 
 # ------------------------------------------------------------------ persistence (watchlist, portfolio)
@@ -270,7 +334,7 @@ def get_watchlist():
             return row(s, analyze(s))
         except Exception:
             return {"symbol": s, "name": s, "error": True}
-    with ThreadPoolExecutor(8) as ex:
+    with ThreadPoolExecutor(WORKERS) as ex:
         return ok(list(ex.map(one, _load("watchlist", []))))
 
 

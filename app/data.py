@@ -15,6 +15,7 @@ BENCH = "^NSEI"  # Nifty 50 (price index)
 PRICE_TTL = 6 * 3600
 INFO_TTL = 24 * 3600
 FIN_TTL = 24 * 3600
+EXTRAS_TTL = 6 * 3600   # earnings dates, dividends, holders, news
 
 _mode = {"value": None, "reason": ""}
 _lock = threading.Lock()
@@ -57,7 +58,7 @@ def invalidate(symbols) -> int:
     n = 0
     for s in symbols:
         safe = re.sub(r"[^A-Za-z0-9_.-]", "_", s)
-        for pat in (f"hist_*_{safe}_*.pkl", f"info_*_{safe}.pkl", f"fin_*_{safe}.pkl"):
+        for pat in (f"hist_*_{safe}_*.pkl", f"info_*_{safe}.pkl", f"fin_*_{safe}.pkl", f"extras_*_{safe}.pkl"):
             for p in CACHE_DIR.glob(pat):
                 try:
                     p.unlink()
@@ -94,9 +95,24 @@ def mode_reason() -> str:
 
 
 # ---------------------------------------------------------------- live
+def rate_limited(e: BaseException) -> bool:
+    return "RateLimit" in type(e).__name__ or "Too Many Requests" in str(e)
+
+
+def _retry(fn, tries: int = 3, waits=(4, 12)):
+    """Yahoo throttles bursts (a 500-stock screener run is one): back off and retry instead of failing the symbol."""
+    for k in range(tries):
+        try:
+            return fn()
+        except Exception as e:
+            if not rate_limited(e) or k == tries - 1:
+                raise
+            time.sleep(waits[min(k, len(waits) - 1)])
+
+
 def _live_history(sym: str, years: int, period: str | None = None) -> pd.DataFrame:
     import yfinance as yf
-    df = yf.Ticker(sym).history(period=period or f"{years}y", auto_adjust=True)
+    df = _retry(lambda: yf.Ticker(sym).history(period=period or f"{years}y", auto_adjust=True))
     if df is None or df.empty:
         return pd.DataFrame()
     df = df[["Open", "High", "Low", "Close", "Volume"]].dropna(subset=["Close"])
@@ -117,7 +133,7 @@ def _num(x):
 
 def _live_info(sym: str, price: float | None) -> dict:
     import yfinance as yf
-    i = yf.Ticker(sym).info or {}
+    i = _retry(lambda: yf.Ticker(sym).info) or {}
     price = _num(i.get("currentPrice")) or _num(i.get("regularMarketPrice")) or price
     de = _num(i.get("debtToEquity"))
     div_rate = _num(i.get("dividendRate"))
@@ -139,7 +155,79 @@ def _live_info(sym: str, price: float | None) -> dict:
         "target_mean": _num(i.get("targetMeanPrice")), "target_high": _num(i.get("targetHighPrice")),
         "target_low": _num(i.get("targetLowPrice")), "analysts": _num(i.get("numberOfAnalystOpinions")),
         "beta": _num(i.get("beta")), "avg_volume": _num(i.get("averageVolume")),
+        "ps": _num(i.get("priceToSalesTrailing12Months")), "ev_ebitda": _num(i.get("enterpriseToEbitda")),
+        "peg": _num(i.get("trailingPegRatio")) or _num(i.get("pegRatio")),
+        "insiders": _num(i.get("heldPercentInsiders")), "institutions": _num(i.get("heldPercentInstitutions")),
+        "consensus": i.get("recommendationKey") if i.get("recommendationKey") not in (None, "none") else None,
+        "consensus_mean": _num(i.get("recommendationMean")),
+        "next_earnings": _ts_date(i.get("earningsTimestamp")),
+        "fetched_at": time.strftime("%Y-%m-%d %H:%M"),
     }
+
+
+def _ts_date(ts):
+    try:
+        return time.strftime("%Y-%m-%d", time.localtime(float(ts))) if ts else None
+    except Exception:
+        return None
+
+
+# Yahoo's `info` ratios for Indian companies are often missing or stale. Anything we can rebuild from the statements, we do.
+_DERIVABLE = ("profit_margin", "op_margin", "roe", "debt_to_equity", "current_ratio", "fcf", "eps", "book_value", "shares",
+              "revenue_growth", "earnings_growth")
+
+
+def _ttm(q: dict, key: str):
+    """Trailing-12-month sum from the quarterly table, or None if fewer than 4 quarters."""
+    v = [x for x in (q.get(key) or [])[-4:] if x is not None]
+    return sum(v) if len(v) == 4 else None
+
+
+def _latest(a: dict, key: str, back: int = 0):
+    v = a.get(key) or []
+    i = len(v) - 1 - back
+    return v[i] if i >= 0 else None
+
+
+def fill_from_statements(info: dict, fin: dict) -> dict:
+    """Fill missing ratios (ROE, margins, D/E, current ratio, FCF, EPS, book value, growth) from the statements.
+    Records which fields were derived in info["derived"] so the UI can say so."""
+    a, q = fin.get("annual") or {}, fin.get("quarterly") or {}
+    if not a.get("periods"):
+        return info
+    fin_sector = info.get("sector") in ("Financial Services",)
+    ni, rev = _ttm(q, "net_income") or _latest(a, "net_income"), _ttm(q, "revenue") or _latest(a, "revenue")
+    equity, debt = _latest(a, "equity"), _latest(a, "total_debt")
+    shares = info.get("shares") or _latest(a, "shares_out")
+    cand = {
+        "profit_margin": (ni / rev) if (ni is not None and rev) else None,
+        "op_margin": (_latest(a, "operating_income") / _latest(a, "revenue")) if (_latest(a, "operating_income") is not None and _latest(a, "revenue")) else None,
+        "roe": (ni / equity) if (ni is not None and equity and equity > 0) else None,
+        "debt_to_equity": None if fin_sector else ((debt / equity) if (debt is not None and equity and equity > 0) else None),
+        "current_ratio": None if fin_sector else ((_latest(a, "current_assets") / _latest(a, "current_liabilities"))
+                                                   if (_latest(a, "current_assets") and _latest(a, "current_liabilities")) else None),
+        "fcf": None if fin_sector else (_latest(a, "free_cash_flow") if _latest(a, "free_cash_flow") is not None else
+                                        ((_latest(a, "operating_cash_flow") - abs(_latest(a, "capex") or 0)) if _latest(a, "operating_cash_flow") is not None else None)),
+        "eps": (ni / shares) if (ni is not None and shares) else None,
+        "book_value": (equity / shares) if (equity and shares) else None,
+        "shares": shares,
+        "revenue_growth": (_latest(a, "revenue") / _latest(a, "revenue", 1) - 1) if (_latest(a, "revenue") and _latest(a, "revenue", 1) and _latest(a, "revenue", 1) > 0) else None,
+        "earnings_growth": (_latest(a, "net_income") / _latest(a, "net_income", 1) - 1) if (_latest(a, "net_income") and _latest(a, "net_income", 1) and _latest(a, "net_income", 1) > 0) else None,
+    }
+    derived = []
+    for k in _DERIVABLE:
+        if info.get(k) is None and cand.get(k) is not None:
+            info[k] = float(cand[k])
+            derived.append(k)
+    if derived:
+        info["derived"] = derived
+        if info.get("eps") and info.get("price") and info.get("pe") is None and info["eps"] > 0:
+            info["pe"] = info["price"] / info["eps"]; derived.append("pe")
+        if info.get("book_value") and info.get("price") and info.get("pb") is None and info["book_value"] > 0:
+            info["pb"] = info["price"] / info["book_value"]; derived.append("pb")
+        if not info.get("fundamentals_ok") and (info.get("roe") is not None or info.get("eps") is not None):
+            info["fundamentals_ok"] = True
+    return info
 
 
 # ---------------------------------------------------------------- demo
@@ -225,8 +313,13 @@ def get_info(sym: str) -> dict:
     else:
         try:
             info = _live_info(sym, price)
-        except Exception:
-            info = {"name": sym, "price": price, "fundamentals_ok": False}
+        except Exception as e:
+            if rate_limited(e):
+                raise
+            info = {"name": sym, "price": price, "fundamentals_ok": False, "fetched_at": time.strftime("%Y-%m-%d %H:%M")}
+        info["price"] = info.get("price") or price
+        if any(info.get(k) is None for k in _DERIVABLE) and not sym.startswith("^"):
+            fill_from_statements(info, _financials_raw(sym))
     info["price"] = info.get("price") or price
     cache_put(key, info)
     return info
@@ -239,7 +332,9 @@ _INCOME_ROWS = {"revenue": ("Total Revenue", "Operating Revenue"), "operating_in
 _CASHFLOW_ROWS = {"operating_cash_flow": ("Operating Cash Flow",), "capex": ("Capital Expenditure",),
                   "free_cash_flow": ("Free Cash Flow",)}
 _BALANCE_ROWS = {"total_debt": ("Total Debt",), "equity": ("Stockholders Equity", "Common Stock Equity", "Total Equity Gross Minority Interest"),
-                 "cash": ("Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments")}
+                 "cash": ("Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments"),
+                 "current_assets": ("Current Assets",), "current_liabilities": ("Current Liabilities",),
+                 "shares_out": ("Ordinary Shares Number", "Share Issued")}
 FIN_LABELS = {**_INCOME_ROWS, **_CASHFLOW_ROWS, **_BALANCE_ROWS}
 
 
@@ -277,8 +372,10 @@ def _live_financials(sym: str) -> dict:
 
     def grab(attr):
         try:
-            return getattr(t, attr)
-        except Exception:
+            return _retry(lambda: getattr(t, attr))
+        except Exception as e:
+            if rate_limited(e):
+                raise
             return None
     annual = _tabulate([(grab("income_stmt"), _INCOME_ROWS), (grab("cashflow"), _CASHFLOW_ROWS), (grab("balance_sheet"), _BALANCE_ROWS)])
     quarterly = _tabulate([(grab("quarterly_income_stmt"), _INCOME_ROWS)])
@@ -312,8 +409,7 @@ def _demo_financials(sym: str) -> dict:
     return {"annual": annual, "quarterly": quarterly, "source": "Synthetic demo data"}
 
 
-def get_financials(sym: str) -> dict:
-    """Multi-year income statement, cash flow and balance sheet highlights. Values are absolute currency units."""
+def _financials_raw(sym: str) -> dict:
     key = f"fin_{mode()}_{sym}"
     hit = cache_get(key, FIN_TTL)
     if hit is not None:
@@ -321,7 +417,113 @@ def get_financials(sym: str) -> dict:
     try:
         fin = _demo_financials(sym) if mode() == "demo" else _live_financials(sym)
     except Exception as e:
+        if rate_limited(e):
+            raise
         return {"annual": {"periods": []}, "quarterly": {"periods": []}, "error": f"Could not load statements ({type(e).__name__})."}
-    fin["currency"] = get_info(sym).get("currency") or "INR"
     cache_put(key, fin)
     return fin
+
+
+def get_financials(sym: str) -> dict:
+    """Multi-year income statement, cash flow and balance sheet highlights. Values are absolute currency units."""
+    fin = dict(_financials_raw(sym))
+    fin["currency"] = get_info(sym).get("currency") or "INR"
+    return fin
+
+
+# ---------------------------------------------------------------- extras: earnings, dividends, holders, consensus, news
+def _live_extras(sym: str, info: dict) -> dict:
+    import yfinance as yf
+    t = yf.Ticker(sym)
+    price = info.get("price")
+
+    def grab(attr):
+        try:
+            return getattr(t, attr)
+        except Exception:
+            return None
+    out = {"earnings": {"next_date": info.get("next_earnings"), "history": []}, "dividends": {"history": []}, "news": []}
+    cal = grab("calendar") or {}
+    ed = cal.get("Earnings Date") if isinstance(cal, dict) else None
+    if ed:
+        out["earnings"]["next_date"] = str(ed[0]) if isinstance(ed, (list, tuple)) else str(ed)
+    edf = grab("earnings_dates")
+    if edf is not None and not getattr(edf, "empty", True):
+        today = pd.Timestamp.today().normalize()
+        rows = []
+        for ts, r in edf.iterrows():
+            d = pd.Timestamp(ts).tz_localize(None).normalize() if pd.Timestamp(ts).tzinfo else pd.Timestamp(ts).normalize()
+            act = _num(r.get("Reported EPS"))
+            if act is None or d > today:
+                continue
+            rows.append({"date": d.strftime("%Y-%m-%d"), "eps_est": _num(r.get("EPS Estimate")), "eps_actual": act, "surprise": _num(r.get("Surprise(%)"))})
+        seen = set()
+        out["earnings"]["history"] = [r for r in sorted(rows, key=lambda r: r["date"], reverse=True) if not (r["date"] in seen or seen.add(r["date"]))][:8]
+    dv = grab("dividends")
+    if dv is not None and len(dv):
+        dv = dv[dv > 0]
+        idx = pd.DatetimeIndex(dv.index)
+        idx = idx.tz_localize(None) if idx.tz is not None else idx
+        dv.index = idx
+        cutoff = pd.Timestamp.today() - pd.DateOffset(years=5)
+        recent = dv[dv.index >= cutoff]
+        ttm = float(dv[dv.index >= pd.Timestamp.today() - pd.DateOffset(days=365)].sum())
+        by_year = recent.groupby(recent.index.year).sum()
+        growth = None
+        if len(by_year) >= 3 and by_year.iloc[0] > 0:
+            yrs = int(by_year.index[-1] - by_year.index[0])
+            growth = float((by_year.iloc[-1] / by_year.iloc[0]) ** (1 / yrs) - 1) if yrs > 0 else None
+        out["dividends"] = {"history": [{"date": d.strftime("%Y-%m-%d"), "amount": float(v)} for d, v in recent.iloc[-12:].items()][::-1],
+                            "ttm": ttm, "yield": (ttm / price) if (ttm and price) else None,
+                            "years_paid": int((dv.groupby(dv.index.year).sum() > 0).sum()), "growth": growth,
+                            "last_date": dv.index[-1].strftime("%Y-%m-%d")}
+    news = grab("news") or []
+    for n in news[:8]:
+        c = n.get("content", n) if isinstance(n, dict) else {}
+        url = (c.get("canonicalUrl") or c.get("clickThroughUrl") or {}).get("url") if isinstance(c.get("canonicalUrl") or c.get("clickThroughUrl"), dict) else c.get("link")
+        if c.get("title") and url:
+            out["news"].append({"title": c["title"], "url": url, "provider": (c.get("provider") or {}).get("displayName", ""),
+                                "date": (c.get("pubDate") or "")[:10]})
+    out["holders"] = {"insiders": info.get("insiders"), "institutions": info.get("institutions")}
+    out["consensus"] = {"key": info.get("consensus"), "mean": info.get("consensus_mean"), "analysts": info.get("analysts"),
+                        "target_mean": info.get("target_mean"), "target_high": info.get("target_high"), "target_low": info.get("target_low")}
+    out["valuation"] = {"ps": info.get("ps"), "ev_ebitda": info.get("ev_ebitda"), "peg": info.get("peg"), "forward_pe": info.get("forward_pe")}
+    return out
+
+
+def _demo_extras(sym: str, info: dict) -> dict:
+    rng = _rng(sym + "|extras")
+    price, eps = info.get("price") or 100.0, info.get("eps") or 5.0
+    today = pd.Timestamp.today().normalize()
+    qdates = [today - pd.DateOffset(months=3 * k + 1) for k in range(6)]
+    hist = []
+    for d in qdates:
+        est = eps / 4 * float(rng.uniform(0.9, 1.1)); act = est * float(rng.uniform(0.85, 1.15))
+        hist.append({"date": d.strftime("%Y-%m-%d"), "eps_est": est, "eps_actual": act, "surprise": (act / est - 1) * 100})
+    amt = price * float(rng.uniform(0.003, 0.025))
+    divs = [{"date": (today - pd.DateOffset(years=k, months=2)).strftime("%Y-%m-%d"), "amount": amt / (1.08 ** k)} for k in range(5)]
+    keys = ["strong_buy", "buy", "hold", "underperform"]
+    mean = float(rng.uniform(1.5, 3.5))
+    return {"earnings": {"next_date": (today + pd.DateOffset(days=int(rng.integers(5, 80)))).strftime("%Y-%m-%d"), "history": hist},
+            "dividends": {"history": divs, "ttm": amt, "yield": amt / price, "years_paid": 5, "growth": 0.08, "last_date": divs[0]["date"]},
+            "news": [{"title": f"{info.get('name', sym)}: synthetic headline {k + 1} (demo mode has no news feed)", "url": "#", "provider": "demo", "date": today.strftime("%Y-%m-%d")} for k in range(3)],
+            "holders": {"insiders": float(rng.uniform(0.2, 0.75)), "institutions": float(rng.uniform(0.1, 0.5))},
+            "consensus": {"key": keys[min(3, int((mean - 1) // 0.8))], "mean": mean, "analysts": info.get("analysts"),
+                          "target_mean": info.get("target_mean"), "target_high": None, "target_low": None},
+            "valuation": {"ps": float(rng.uniform(0.5, 12)), "ev_ebitda": float(rng.uniform(5, 40)), "peg": None, "forward_pe": info.get("forward_pe")}}
+
+
+def get_extras(sym: str) -> dict:
+    """Earnings dates and surprises, dividend record, holders, analyst consensus, extra valuation ratios and news."""
+    key = f"extras_{mode()}_{sym}"
+    hit = cache_get(key, EXTRAS_TTL)
+    if hit is not None:
+        return hit
+    info = get_info(sym)
+    try:
+        ex = _demo_extras(sym, info) if mode() == "demo" else _live_extras(sym, info)
+    except Exception as e:
+        return {"earnings": {"history": []}, "dividends": {"history": []}, "news": [], "error": f"Could not load extras ({type(e).__name__})."}
+    ex["fetched_at"] = time.strftime("%Y-%m-%d %H:%M")
+    cache_put(key, ex)
+    return ex

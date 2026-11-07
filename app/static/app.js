@@ -2,7 +2,7 @@
 const $ = (s, el = document) => el.querySelector(s);
 const view = $("#view");
 let charts = [];
-let STATE = { mode: "live", screener: null, sort: { k: "score", dir: -1 }, wl: new Set() };
+let STATE = { mode: "live", screener: null, sort: { k: "score", dir: -1 }, wl: new Set(), groups: [], poll: null };
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const num = (x, d = 2) => x == null ? "-" : Number(x).toLocaleString("en-IN", { maximumFractionDigits: d, minimumFractionDigits: d });
@@ -51,7 +51,7 @@ applyTheme(document.documentElement.dataset.theme || "dark", false);
 // ---------------------------------------------------------------- shell
 async function init() {
   const s = await api("/api/status");
-  STATE.mode = s.mode;
+  STATE.mode = s.mode; STATE.groups = s.groups || [];
   const m = $("#mode"); m.textContent = s.mode === "live" ? "LIVE DATA" : "DEMO DATA"; m.className = "badge " + s.mode;
   if (s.mode === "demo") {
     const b = $("#banner"); b.classList.remove("hidden");
@@ -62,6 +62,7 @@ async function init() {
 }
 async function route() {
   killCharts();
+  STATE.poll = null;     // stop any screener polling that belongs to the page we are leaving
   view.onclick = null;   // views attach their own delegated handler; don't let one leak into the next page
   const [, page, arg] = (location.hash || "#/screener").split("/");
   document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#/" + page));
@@ -92,13 +93,44 @@ document.addEventListener("click", e => { if (!e.target.closest(".search")) sg.c
 function go(sym) { sg.classList.add("hidden"); q.value = ""; location.hash = "#/stock/" + encodeURIComponent(sym.includes(".") || sym.startsWith("^") || sym.toLowerCase().startsWith("us:") ? sym : sym.toUpperCase()); }
 
 // ---------------------------------------------------------------- screener
+// Screeners run as background jobs on the server: poll until the job finishes, showing progress and the best rows so far.
+// Returns null if the user navigated away while polling (the caller must then do nothing).
+async function screen(path, refresh, what) {
+  const token = STATE.poll = Symbol();
+  let d = await api(path + (refresh ? "?refresh=true" : ""));
+  while (d.progress && d.progress.running) {
+    if (STATE.poll !== token) return null;
+    const p = d.progress, pc = p.total ? p.done / p.total * 100 : 0, eta = p.done > 3 ? Math.round(p.elapsed / p.done * (p.total - p.done)) : null;
+    const done = [...d.rows].filter(r => r.score != null).sort((a, b) => b.score - a.score).slice(0, 12);
+    view.innerHTML = `<div class="card"><h3>Analysing ${what}… ${p.done} of ${p.total}</h3><div class="bar" style="height:10px"><i style="width:${pc.toFixed(1)}%;background:var(--accent)"></i></div>
+      <p class="note">${p.elapsed}s elapsed${eta != null ? `, roughly ${eta}s to go` : ""}. ${STATE.mode === "live" ? "The first run downloads prices, ratios and statements for every stock; later runs come from the cache (prices 6h, fundamentals 24h)." : ""} You can use other tabs meanwhile: the job keeps running on the server.</p>
+      ${p.error ? `<p class="neg">${esc(p.error)}</p>` : ""}
+      ${done.length ? `<p class="note" style="margin-top:10px">Highest scores so far:</p>${done.map(r => `<a class="pill" href="#/stock/${encodeURIComponent(r.symbol)}">${esc(r.symbol.replace(".NS", ""))} · ${num(r.score, 0)}</a>`).join("")}` : ""}</div>`;
+    await new Promise(r => setTimeout(r, 2500));
+    if (STATE.poll !== token) return null;
+    d = await api(path);
+  }
+  return d;
+}
+const PRESETS = {
+  "": [() => true, ""],
+  quality: [x => x.roe >= .15 && (x.debt_to_equity == null || x.debt_to_equity < 1) && x.earnings_growth > .10 && x.fundamentals_ok !== false, "ROE ≥ 15%, debt/equity < 1, earnings growth > 10%"],
+  value: [x => x.upside >= .15 && ["Medium", "High"].includes(x.fv_confidence) && (x.score ?? 0) >= 50, "≥ 15% below fair value (models agree) with score ≥ 50"],
+  momentum: [x => x.signals.medium.signal === "BUY" && x.ret_6m > .10, "medium-term BUY and 6-month return > 10%"],
+  dividend: [x => x.dividend_yield >= .02 && (x.score ?? 0) >= 50, "dividend yield ≥ 2% with score ≥ 50"],
+  cheap52: [x => x.rsi < 40 && x.signals.long.signal !== "SELL" && (x.score ?? 0) >= 55, "RSI < 40 (beaten down) but healthy business (score ≥ 55, no long-term SELL)"],
+};
 async function screenerView(refresh) {
   if (!STATE.screener || refresh) {
-    spin(STATE.mode === "live" ? (refresh ? "Refetching prices and fundamentals for every stock…" : "Analysing the universe… the first run downloads data for every stock (usually well under a minute).") : "Analysing…");
-    STATE.screener = await api("/api/screener" + (refresh ? "?refresh=true" : ""));
+    const d = await screen("/api/screener", refresh, "the Nifty 500");
+    if (!d) return;
+    STATE.screener = d;
   }
   const d = STATE.screener, rows = d.rows;
   const sectors = [...new Set(rows.map(r => r.sector).filter(Boolean))].sort();
+  const industries = [...new Set(rows.map(r => r.industry).filter(Boolean))].sort();
+  const groups = STATE.groups.filter(g => rows.some(r => r.group === g)).concat([...new Set(rows.map(r => r.group).filter(g => g && !STATE.groups.includes(g)))]);
+  const F = STATE.filters || (STATE.filters = { h: "long", s: "", sec: "", ind: "", grp: "", preset: "", min: 0, pe: "", roe: "", q: "" });
   const cnt = h => ["BUY", "HOLD", "SELL"].map(s => rows.filter(r => r.signals[h].signal === s).length);
   const top = rows.filter(r => r.signals.long.signal === "BUY").sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, 5);
   const worst = rows.filter(r => r.signals.long.signal === "SELL").sort((a, b) => (a.score ?? 0) - (b.score ?? 0)).slice(0, 5);
@@ -107,7 +139,7 @@ async function screenerView(refresh) {
   const badge = (x, h) => { const c = recent.get(x.symbol + ":" + h); return sigBadge(x.signals[h].signal) + (c ? `<span class="chg" title="Changed from ${c.from} on ${c.date}">●</span>` : ""); };
   const short = s => s.replace(".NS", "");
   view.innerHTML = `
-  <h2>Screener</h2><p class="sub">${rows.length} stocks analysed ${d.failed.length ? `(${d.failed.length} failed: ${esc(d.failed.join(", "))})` : ""} · as of ${esc(d.as_of)}. Click a column to sort, a row to open.</p>
+  <h2>Screener</h2><p class="sub">${rows.length} stocks analysed${d.failed.length ? ` (${d.failed.length} without data: ${esc(d.failed.map(short).join(", "))})` : ""} · as of ${esc(d.as_of)}${d.seconds ? ` · run took ${d.seconds}s` : ""}. Click a column to sort, a row to open.</p>
   <div class="grid g3" style="margin-bottom:16px">
     ${[["long", "Long term"], ["medium", "Medium term"], ["short", "Short term"]].map(([h, l]) => { const [b, o, s] = cnt(h); return `<div class="card stat"><div class="l">${l} signals</div><div class="v"><span class="pos">${b} buy</span> · <span style="color:var(--amber)">${o} hold</span> · <span class="neg">${s} sell</span></div></div>`; }).join("")}
   </div>
@@ -117,40 +149,51 @@ async function screenerView(refresh) {
     <div class="card"><h3>Signal changes (30 days)</h3>${changes.length ? `<div class="chglist">${changes.slice(0, 8).map(c => `<a class="chgrow" href="#/stock/${encodeURIComponent(c.symbol)}"><span class="muted">${esc(c.date.slice(5))}</span><b>${esc(short(c.symbol))}</b><span class="muted">${esc(c.horizon)}</span>${sigBadge(c.from)}<span class="muted">→</span>${sigBadge(c.to)}</a>`).join("")}</div>${changes.length > 8 ? `<p class="note">${changes.length - 8} more in the table (● marks a change in the last week).</p>` : ""}` : `<span class="neu">None recorded yet. Each screener run is compared with the previous one, so flips like HOLD → BUY show up here over time.</span>`}</div>
   </div>
   <div class="filters">
+    <label>Preset screen<select id="fpre"><option value="">None</option><option value="quality">Quality compounders</option><option value="value">Below fair value</option><option value="momentum">Momentum leaders</option><option value="dividend">Dividend payers</option><option value="cheap52">Beaten down but healthy</option></select></label>
+    <label>Index group<select id="fgrp"><option value="">All (${rows.length})</option>${groups.map(g => `<option>${esc(g)}</option>`).join("")}</select></label>
     <label>Signal horizon<select id="fh"><option value="long">Long term</option><option value="medium">Medium term</option><option value="short">Short term</option></select></label>
     <label>Signal<select id="fs"><option value="">Any</option><option>BUY</option><option>HOLD</option><option>SELL</option></select></label>
     <label>Sector<select id="fsec"><option value="">All</option>${sectors.map(s => `<option>${esc(s)}</option>`).join("")}</select></label>
+    <label>Industry (NSE)<select id="find"><option value="">All</option>${industries.map(s => `<option>${esc(s)}</option>`).join("")}</select></label>
     <label>Min score <input id="fmin" type="number" value="0" min="0" max="100" style="width:80px"></label>
     <label>Max P/E <input id="fpe" type="number" placeholder="any" style="width:80px"></label>
     <label>Min ROE % <input id="froe" type="number" placeholder="any" style="width:80px"></label>
+    <label>Find <input id="fq" placeholder="name or symbol" style="width:140px"></label>
     <button id="fref" title="Refetch prices and fundamentals from the source (ignores the cache)">Refresh data</button>
     <button id="fcsv" title="Download the filtered table as CSV">Export CSV</button>
   </div>
+  <p class="note" id="fdesc" style="margin:-6px 0 10px"></p>
   <div class="tablewrap"><table><thead><tr id="thead"></tr></thead><tbody id="tbody"></tbody></table></div>`;
-  const cols = [["symbol", "Stock"], ["price", "Price"], ["change_1d", "1D"], ["fair_value", "Fair value"], ["upside", "Upside"], ["pe", "P/E"], ["roe", "ROE"], ["score", "Score"], ["sig", "Signal"], ["ret_6m", "6M"], ["rsi", "RSI"]];
+  const cols = [["symbol", "Stock"], ["group", "Index"], ["price", "Price"], ["change_1d", "1D"], ["market_cap", "Mkt cap"], ["fair_value", "Fair value"], ["upside", "Upside"], ["pe", "P/E"], ["roe", "ROE"], ["dividend_yield", "Div. yield"], ["score", "Score"], ["sig", "Signal"], ["ret_6m", "6M"], ["rsi", "RSI"]];
+  const grpShort = g => ({ "Nifty 50": "N50", "Nifty Next 50": "Next 50", "Midcap 150": "Mid", "Smallcap 250": "Small" }[g] || g || "");
+  const ids = { h: "fh", s: "fs", sec: "fsec", ind: "find", grp: "fgrp", preset: "fpre", min: "fmin", pe: "fpe", roe: "froe", q: "fq" };
+  Object.entries(ids).forEach(([k, id]) => { $("#" + id).value = F[k]; });
   let shown = rows;
   const draw = () => {
-    const h = $("#fh").value, s = $("#fs").value, sec = $("#fsec").value, mn = +$("#fmin").value || 0, pe = parseFloat($("#fpe").value), roe = parseFloat($("#froe").value);
-    let r = rows.filter(x => (!s || x.signals[h].signal === s) && (!sec || x.sector === sec) && (x.score ?? 0) >= mn &&
-      (isNaN(pe) || (x.pe != null && x.pe <= pe)) && (isNaN(roe) || (x.roe != null && x.roe * 100 >= roe)));
+    Object.entries(ids).forEach(([k, id]) => { F[k] = $("#" + id).value; });
+    const h = F.h, s = F.s, mn = +F.min || 0, pe = parseFloat(F.pe), roe = parseFloat(F.roe), qq = F.q.trim().toLowerCase(), [pf, pdesc] = PRESETS[F.preset] || PRESETS[""];
+    let r = rows.filter(x => (!s || x.signals[h].signal === s) && (!F.sec || x.sector === F.sec) && (!F.ind || x.industry === F.ind) && (!F.grp || x.group === F.grp) && (x.score ?? 0) >= mn &&
+      (isNaN(pe) || (x.pe != null && x.pe <= pe)) && (isNaN(roe) || (x.roe != null && x.roe * 100 >= roe)) && pf(x) &&
+      (!qq || x.symbol.toLowerCase().includes(qq) || (x.name || "").toLowerCase().includes(qq)));
     const { k, dir } = STATE.sort;
     const val = x => k === "sig" ? x.signals[h].score : k === "symbol" ? x.symbol : x[k];
     r.sort((a, b) => { const A = val(a), B = val(b); if (A == null) return 1; if (B == null) return -1; return (A > B ? 1 : A < B ? -1 : 0) * dir; });
     shown = r;
+    $("#fdesc").textContent = `${r.length} of ${rows.length} stocks shown` + (pdesc ? ` · preset: ${pdesc}` : "") + ". Fundamentals missing on Yahoo are rebuilt from the statements where possible; a stock with no ratios at all is scored on price only.";
     $("#thead").innerHTML = cols.map(([k2, l]) => `<th data-k="${k2}">${l}${STATE.sort.k === k2 ? (dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("");
-    $("#tbody").innerHTML = r.map(x => `<tr class="click" data-s="${esc(x.symbol)}"><td><b>${esc(x.symbol.replace(".NS", ""))}</b> <span class="muted">${esc(x.name)}</span></td>
-      <td>${num(x.price)}</td><td>${spct(x.change_1d)}</td><td>${num(x.fair_value, 0)}</td><td>${spct(x.upside, 0)}</td><td>${num(x.pe, 1)}</td><td>${pct(x.roe)}</td>
+    $("#tbody").innerHTML = r.map(x => `<tr class="click" data-s="${esc(x.symbol)}"><td><b>${esc(x.symbol.replace(".NS", ""))}</b> <span class="muted">${esc(x.name)}</span></td><td class="muted">${esc(grpShort(x.group))}</td>
+      <td>${num(x.price)}</td><td>${spct(x.change_1d)}</td><td class="muted">${cr(x.market_cap)}</td><td>${num(x.fair_value, 0)}</td><td>${spct(x.upside, 0)}</td><td>${num(x.pe, 1)}</td><td>${pct(x.roe)}</td><td>${pct(x.dividend_yield)}</td>
       <td style="color:${scoreColor(x.score)}">${num(x.score, 0)}</td><td>${badge(x, h)}</td><td>${spct(x.ret_6m, 0)}</td><td>${num(x.rsi, 0)}</td></tr>`).join("")
-      || `<tr><td colspan="11" class="neu">No stocks match these filters.</td></tr>`;
+      || `<tr><td colspan="14" class="neu">No stocks match these filters.</td></tr>`;
   };
   draw();
   view.querySelectorAll(".filters select,.filters input").forEach(el => el.addEventListener("input", draw));
   $("#fref").onclick = () => screenerView(true);
   $("#fcsv").onclick = () => {
-    const hdr = ["symbol", "name", "sector", "price", "change_1d", "fair_value", "upside", "pe", "pb", "roe", "score", "signal_long", "signal_medium", "signal_short", "ret_6m", "rsi", "trend"];
+    const hdr = ["symbol", "name", "group", "sector", "industry", "price", "change_1d", "market_cap", "fair_value", "upside", "fv_confidence", "pe", "pb", "roe", "dividend_yield", "debt_to_equity", "revenue_growth", "earnings_growth", "score", "signal_long", "signal_medium", "signal_short", "ret_6m", "ret_1y", "rsi", "trend", "consensus"];
     const q = v => v == null ? "" : /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
-    const lines = [hdr.join(",")].concat(shown.map(x => [x.symbol, x.name, x.sector, x.price, x.change_1d, x.fair_value, x.upside, x.pe, x.pb, x.roe, x.score,
-      x.signals.long.signal, x.signals.medium.signal, x.signals.short.signal, x.ret_6m, x.rsi, x.trend].map(q).join(",")));
+    const lines = [hdr.join(",")].concat(shown.map(x => [x.symbol, x.name, x.group, x.sector, x.industry, x.price, x.change_1d, x.market_cap, x.fair_value, x.upside, x.fv_confidence, x.pe, x.pb, x.roe, x.dividend_yield, x.debt_to_equity, x.revenue_growth, x.earnings_growth, x.score,
+      x.signals.long.signal, x.signals.medium.signal, x.signals.short.signal, x.ret_6m, x.ret_1y, x.rsi, x.trend, x.consensus].map(q).join(",")));
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
     a.download = `stockpro-screener-${d.as_of.slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(a.href); };
   $("#thead").onclick = e => { const k = e.target.dataset.k; if (!k) return; STATE.sort = { k, dir: STATE.sort.k === k ? -STATE.sort.dir : -1 }; draw(); };
@@ -216,7 +259,7 @@ async function stockView(sym) {
   view.innerHTML = `
   ${i.fundamentals_ok === false ? `<div class="warn">Yahoo returned no fundamentals (P/E, ROE, cash flow…) for this ticker, so the long- and medium-term scores below rest on price data only. Check the ticker or try the .BO (BSE) version.</div>` : ""}
   <div class="head"><div><h2>${esc(a.name)}</h2>
-    <div><span class="pill">${esc(a.symbol)}</span>${i.sector ? `<span class="pill">${esc(i.sector)}</span>` : ""}${i.market_cap ? `<span class="pill">Mkt cap ${cr(i.market_cap)}</span>` : ""}${!a.in_universe ? `<span class="pill">not in screener universe</span>` : ""}</div></div>
+    <div><span class="pill">${esc(a.symbol)}</span>${i.sector ? `<span class="pill">${esc(i.sector)}${i.industry ? " · " + esc(i.industry) : ""}</span>` : ""}${a.group ? `<span class="pill">${esc(a.group)}</span>` : ""}${i.market_cap ? `<span class="pill">Mkt cap ${cr(i.market_cap)}</span>` : ""}${!a.in_universe ? `<span class="pill">not in screener universe</span>` : ""}</div></div>
     <div style="text-align:right"><div class="price">${c}${num(a.price)} <span style="font-size:16px">${spct(a.change_1d, 2)}</span></div>
       <button id="wl">${watched ? "★ In watchlist" : "☆ Add to watchlist"}</button> <button id="addp" class="primary">+ Add to portfolio</button></div></div>
   <div class="grid g3">${["long", "medium", "short"].map(sigCard).join("")}</div>
@@ -238,12 +281,14 @@ async function stockView(sym) {
       <span>P/E (trailing)</span><span>${num(i.pe, 1)}</span><span>Forward P/E</span><span>${num(i.forward_pe, 1)}</span><span>P/B</span><span>${num(i.pb, 2)}</span>
       <span>ROE</span><span>${pct(i.roe)}</span><span>Net margin</span><span>${pct(i.profit_margin)}</span><span>Revenue growth</span><span>${pct(i.revenue_growth)}</span>
       <span>Earnings growth</span><span>${pct(i.earnings_growth)}</span><span>Debt / equity</span><span>${num(i.debt_to_equity, 2)}</span><span>Current ratio</span><span>${num(i.current_ratio, 2)}</span>
-      <span>Dividend yield</span><span>${pct(i.dividend_yield)}</span><span>Beta</span><span>${num(i.beta, 2)}</span><span>EPS</span><span>${num(i.eps, 2)}</span></div></div>
+      <span>Dividend yield</span><span>${pct(i.dividend_yield)}</span><span>Beta</span><span>${num(i.beta, 2)}</span><span>EPS</span><span>${num(i.eps, 2)}</span></div>
+      <p class="note">${i.fetched_at ? `Fundamentals fetched ${esc(i.fetched_at)}. ` : ""}${i.derived?.length ? `Rebuilt from the financial statements because Yahoo had no value: ${esc(i.derived.map(k => ({ profit_margin: "net margin", op_margin: "operating margin", roe: "ROE", debt_to_equity: "debt/equity", current_ratio: "current ratio", fcf: "free cash flow", eps: "EPS", book_value: "book value", shares: "share count", revenue_growth: "revenue growth", earnings_growth: "earnings growth", pe: "P/E", pb: "P/B" }[k] || k)).join(", "))}.` : "All ratios as reported by Yahoo Finance."}</p></div>
     <div class="card"><h3>Technicals</h3><div class="kv">
       <span>Trend</span><span>${esc(t.trend)}</span><span>RSI (14)</span><span>${num(t.rsi, 0)}</span><span>50-day avg</span><span>${num(t.sma50, 0)}</span><span>200-day avg</span><span>${num(t.sma200, 0)}</span>
       <span>52-week range</span><span>${num(t.low_52w, 0)} – ${num(t.high_52w, 0)}</span><span>From 52w high</span><span>${spct(t.from_high)}</span>
       <span>Return 1M / 3M</span><span>${spct(t.ret_1m)} / ${spct(t.ret_3m)}</span><span>Return 6M / 1Y</span><span>${spct(t.ret_6m)} / ${spct(t.ret_1y)}</span><span>Volatility (annual)</span><span>${pct(t.vol_ann, 0)}</span></div></div>
   </div>
+  <div id="extras" class="grid" style="margin-top:14px;grid-template-columns:repeat(auto-fit,minmax(340px,1fr))"><div class="card muted">Loading analyst view, earnings and dividends…</div></div>
   <div class="card" style="margin-top:14px"><h3>Financials: is the business actually growing?</h3><div id="fin" class="muted">Loading statements…</div></div>
   <div class="card" style="margin-top:14px"><h3>Peers in the same sector</h3><div id="peers" class="muted">Loading peers…</div></div>
   <div class="card" style="margin-top:14px"><h3>Does the trend rule work on this stock?</h3><div id="bt" class="muted">Running backtest…</div></div>`;
@@ -254,6 +299,38 @@ async function stockView(sym) {
   trendBacktest(a);
   api("/api/financials/" + encodeURIComponent(a.symbol)).then(f => financialsCard($("#fin"), f)).catch(e => { const el = $("#fin"); if (el) el.textContent = e.message; });
   api("/api/peers/" + encodeURIComponent(a.symbol)).then(p => peersCard($("#peers"), p, a.symbol)).catch(e => { const el = $("#peers"); if (el) el.textContent = e.message; });
+  api("/api/extras/" + encodeURIComponent(a.symbol)).then(x => extrasCards($("#extras"), x, a)).catch(e => { const el = $("#extras"); if (el) el.innerHTML = `<div class="card neg">${esc(e.message)}</div>`; });
+}
+
+// Analyst view, earnings record, dividends and news: the "is anyone else watching this?" layer.
+function extrasCards(el, x, a) {
+  if (!el) return;
+  if (x.error) { el.innerHTML = `<div class="card neu">${esc(x.error)}</div>`; return; }
+  const c = cur(a.symbol), e = x.earnings || {}, dv = x.dividends || {}, cs = x.consensus || {}, v = x.valuation || {}, h = x.holders || {};
+  const label = { strong_buy: "Strong buy", buy: "Buy", hold: "Hold", underperform: "Underperform", sell: "Sell" }[cs.key] || null;
+  const hist = e.history || [], beats = hist.filter(r => r.surprise != null && r.surprise > 0).length;
+  const tgt = [cs.target_low, cs.target_mean, cs.target_high].filter(t => t != null);
+  const lo = Math.min(a.price, ...tgt) * .95, hi = Math.max(a.price, ...tgt) * 1.05, posn = t => ((t - lo) / (hi - lo) * 100).toFixed(1);
+  const soon = e.next_date && (new Date(e.next_date) - Date.now()) / 864e5;
+  el.innerHTML = `
+  <div class="card"><h3>Street view</h3>
+    ${cs.mean != null || label ? `<div class="stat"><span class="v">${label || "-"}</span> <span class="muted">${cs.mean != null ? `consensus ${num(cs.mean, 1)} on a 1 (strong buy) to 5 (sell) scale` : ""}${cs.analysts ? ` · ${num(cs.analysts, 0)} analysts` : ""}</span></div>
+    ${cs.mean != null ? `<div class="bar" style="margin:6px 0 10px"><i style="width:${((5 - cs.mean) / 4 * 100).toFixed(0)}%;background:${cs.mean <= 2.5 ? "var(--green)" : cs.mean <= 3.5 ? "var(--amber)" : "var(--red)"}"></i></div>` : ""}` : `<p class="neu">No analyst consensus on Yahoo for this stock.</p>`}
+    ${tgt.length ? `<div class="fvrow"><div class="fvline"></div><div class="fvdot" title="Price" style="left:${posn(a.price)}%;background:var(--text)"></div>${cs.target_low != null ? `<div class="fvdot" title="Low target" style="left:${posn(cs.target_low)}%;background:var(--red)"></div>` : ""}${cs.target_mean != null ? `<div class="fvdot" title="Mean target" style="left:${posn(cs.target_mean)}%;background:var(--amber)"></div>` : ""}${cs.target_high != null ? `<div class="fvdot" title="High target" style="left:${posn(cs.target_high)}%;background:var(--green)"></div>` : ""}</div>
+    <div class="kv"><span>12-month targets (low / mean / high)</span><span>${c}${num(cs.target_low, 0)} / <b>${c}${num(cs.target_mean, 0)}</b> / ${c}${num(cs.target_high, 0)}</span><span>Mean target vs price</span><span>${spct(cs.target_mean != null ? cs.target_mean / a.price - 1 : null, 0)}</span></div>` : ""}
+    <div class="kv" style="margin-top:8px"><span>Promoters / insiders hold</span><span>${pct(h.insiders, 0)}</span><span>Institutions hold</span><span>${pct(h.institutions, 0)}</span><span>P/S · EV/EBITDA</span><span>${num(v.ps, 1)} · ${num(v.ev_ebitda, 1)}</span><span>Forward P/E · PEG</span><span>${num(v.forward_pe, 1)} · ${num(v.peg, 2)}</span></div>
+    <p class="note">Analyst targets lag the price and cluster together; treat them as a sentiment reading, not a forecast. High promoter holding in India usually means aligned owners; a sharp fall in it is worth investigating.</p></div>
+  <div class="card"><h3>Earnings record</h3>
+    ${e.next_date ? `<div class="stat"><span class="v" style="font-size:18px">Next results: ${esc(e.next_date)}</span>${soon != null && soon >= 0 && soon <= 14 ? ` <span class="sig HOLD">within 2 weeks</span>` : ""}</div>` : `<p class="neu">Next results date not published.</p>`}
+    ${hist.length ? `<p class="note" style="margin:6px 0">Beat the EPS estimate in <b>${beats} of ${hist.length}</b> recent quarters.</p>
+    <div style="overflow:auto"><table><thead><tr><th>Quarter</th><th>EPS est.</th><th>Reported</th><th>Surprise</th></tr></thead><tbody>${hist.slice(0, 6).map(r => `<tr><td>${esc(r.date)}</td><td>${num(r.eps_est, 2)}</td><td>${num(r.eps_actual, 2)}</td><td class="${r.surprise > 0 ? "pos" : r.surprise < 0 ? "neg" : ""}">${r.surprise == null ? "-" : (r.surprise > 0 ? "+" : "") + num(r.surprise, 1) + "%"}</td></tr>`).join("")}</tbody></table></div>` : `<p class="neu">No earnings-surprise history on Yahoo for this stock.</p>`}
+    <p class="note">Prices move most around results. A string of misses with a rising price, or beats with a falling price, is a warning that the market disagrees with the headline numbers.</p></div>
+  <div class="card"><h3>Dividends</h3>
+    ${dv.history?.length ? `<div class="stat"><span class="v">${pct(dv.yield)}</span> <span class="muted">trailing yield · ${c}${num(dv.ttm, 2)} per share in the last 12 months</span></div>
+    <div class="kv" style="margin-top:6px"><span>Years with a payout</span><span>${dv.years_paid ?? "-"}</span><span>Payout growth (5y, annualised)</span><span>${spct(dv.growth, 1)}</span><span>Last payout</span><span>${esc(dv.last_date || "-")}</span></div>
+    <table style="margin-top:8px"><thead><tr><th>Ex-date</th><th>Per share</th></tr></thead><tbody>${dv.history.slice(0, 5).map(r => `<tr><td>${esc(r.date)}</td><td>${c}${num(r.amount, 2)}</td></tr>`).join("")}</tbody></table>` : `<p class="neu">No dividends in the last 5 years.</p>`}
+    <p class="note">A long, growing payout record is evidence of real cash profits. A yield far above peers can mean the price has crashed, not that the company is generous.</p></div>
+  ${x.news?.length ? `<div class="card" style="grid-column:1/-1"><h3>Latest news</h3><div class="chglist">${x.news.map(n => `<a class="chgrow" href="${esc(n.url)}" target="_blank" rel="noopener"><span class="muted">${esc(n.date)}</span><b style="white-space:normal">${esc(n.title)}</b><span class="muted">${esc(n.provider)}</span></a>`).join("")}</div><p class="note">Headlines from Yahoo Finance; the model does not read them. Check for results, management changes, regulation or fraud before acting on any signal.</p></div>` : ""}`;
 }
 
 // ---------------------------------------------------------------- ETF page
@@ -304,8 +381,9 @@ function etfView(a) {
 // ---------------------------------------------------------------- ETF screener
 async function etfsView(refresh) {
   if (!STATE.etfs || refresh) {
-    spin(refresh ? "Refetching ETF prices…" : "Analysing ETFs… (first run downloads 5 years of prices for each)");
-    STATE.etfs = await api("/api/etfs" + (refresh ? "?refresh=true" : ""));
+    const d = await screen("/api/etfs", refresh, "the ETF list");
+    if (!d) return;
+    STATE.etfs = d;
   }
   const d = STATE.etfs, rows = d.rows, short = s => s.replace(".NS", "");
   const catShort = x => ({ "Broad market (large cap)": "Large-cap index", "Broad market (mid / small cap)": "Mid/small index", "Sector / thematic": "Sector", "Factor / smart beta": "Factor", "Debt / liquid": "Debt" }[x] || x);
@@ -428,10 +506,10 @@ async function portfolioView() {
 // ---------------------------------------------------------------- backtest
 async function backtestView() {
   view.innerHTML = `<h2>Strategy backtest: momentum</h2><p class="sub">Each month, buy the N strongest stocks by past return (skipping the latest month), equal weight, then compare with the Nifty 50 index. Momentum is one of the best-documented stock-picking effects: this lets you check it on your own universe.</p>
-  <div class="filters"><label>Stocks held<input id="bn" type="number" value="10" min="3" max="30" style="width:80px"></label>
+  <div class="filters"><label>Universe<select id="bg">${STATE.groups.map(g => `<option>${esc(g)}</option>`).join("")}</select></label><label>Stocks held<input id="bn" type="number" value="10" min="3" max="30" style="width:80px"></label>
   <label>Lookback (months)<input id="bl" type="number" value="6" min="1" max="12" style="width:80px"></label><button class="primary" id="brun">Run backtest</button></div><div id="bout"></div>`;
   const run = async () => { $("#bout").innerHTML = `<div class="spin">Running… (downloads up to 10 years of prices the first time)</div>`;
-    try { const b = await api(`/api/backtest/momentum?top_n=${$("#bn").value}&lookback_months=${$("#bl").value}`);
+    try { const b = await api(`/api/backtest/momentum?top_n=${$("#bn").value}&lookback_months=${$("#bl").value}&group=${encodeURIComponent($("#bg").value)}`);
       if (b.error) return $("#bout").innerHTML = `<div class="card neg">${esc(b.error)}</div>`;
       const rowm = (l, m) => `<tr><td>${l}</td><td>${spct(m.cagr)}</td><td>${num(m.total_return, 2)}x−1</td><td class="neg">${pct(m.max_drawdown, 0)}</td><td>${pct(m.volatility, 0)}</td><td>${num(m.sharpe, 2)}</td></tr>`;
       $("#bout").innerHTML = `<div class="card"><div class="chartbox"><canvas id="bc"></canvas></div></div>
@@ -501,7 +579,8 @@ function learnView() {
   <li class="neu"><b>Medium term:</b> momentum-heavy score + uptrend filter + relative strength vs Nifty.</li>
   <li class="neu"><b>Short term:</b> RSI, MACD, Bollinger bands and trend. Lowest reliability.</li>
   <li class="neg"><b>Limits:</b> free data can be stale or wrong; fundamentals are trailing; fair value is assumption-driven; nothing here sees news, management quality, regulation or fraud. Always read the company's latest results and annual report before putting real money in.</li>
-  <li class="neg"><b>Tax &amp; costs</b> (STCG/LTCG, brokerage) reduce returns and are not modelled in signals.</li></ul></div></div>
+  <li class="neg"><b>Tax &amp; costs</b> (STCG/LTCG, brokerage) reduce returns and are not modelled in signals.</li>
+  <li class="neu"><b>Where the data comes from:</b> the Nifty 500 list is NSE's official constituent file; prices, ratios, statements, analyst targets, earnings dates, dividends and news come from Yahoo Finance; mutual fund NAVs from AMFI. Where Yahoo lacks a ratio, the app rebuilds it from the statements and says so on the stock page.</li></ul></div></div>
   <div class="card" style="margin-top:14px"><h3>Glossary</h3><div class="grid g2">${G.map(([k, v]) => `<div><b>${k}</b><div class="muted" style="font-size:13px">${esc(v)}</div></div>`).join("")}</div></div>`;
 }
 

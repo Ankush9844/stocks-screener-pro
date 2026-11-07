@@ -1,12 +1,34 @@
-import json, os, math
+import json, os, math, time
 os.environ["STOCKPRO_MODE"] = "demo"
 os.environ["STOCKPRO_HOME"] = "/tmp/stockpro_test_home"
+os.makedirs("/tmp/stockpro_test_home", exist_ok=True)
+# A small universe keeps the suite fast; the bundled Nifty 500 file is tested separately.
+open("/tmp/stockpro_test_home/universe.csv", "w").write("symbol,name,sector,industry,group\n" + "\n".join(
+    f"{s},{n},{sec},{ind},{g}" for s, n, sec, ind, g in [
+        ("TCS", "Tata Consultancy Services", "Technology", "Information Technology", "Nifty 50"), ("INFY", "Infosys", "Technology", "Information Technology", "Nifty 50"),
+        ("WIPRO", "Wipro", "Technology", "Information Technology", "Nifty 50"), ("HCLTECH", "HCL Technologies", "Technology", "Information Technology", "Nifty 50"),
+        ("HDFCBANK", "HDFC Bank", "Financial Services", "Financial Services", "Nifty 50"), ("ICICIBANK", "ICICI Bank", "Financial Services", "Financial Services", "Nifty 50"),
+        ("RELIANCE", "Reliance Industries", "Energy", "Oil Gas & Consumable Fuels", "Nifty 50"), ("ITC", "ITC", "Consumer Defensive", "Fast Moving Consumer Goods", "Nifty 50"),
+        ("SUNPHARMA", "Sun Pharma", "Healthcare", "Healthcare", "Nifty 50"), ("LT", "Larsen & Toubro", "Industrials", "Construction", "Nifty 50"),
+        ("PERSISTENT", "Persistent Systems", "Technology", "Information Technology", "Nifty Next 50"), ("CDSL", "Central Depository Services", "Financial Services", "Financial Services", "Midcap 150")]))
 import numpy as np, pandas as pd
 from fastapi.testclient import TestClient
-from app import analysis, data
+from app import analysis, data, universe
 from app.main import app
 
 c = TestClient(app)
+
+
+def screen(path, timeout=90):
+    """Screeners run in the background: poll like the frontend does until the job is finished."""
+    t0 = time.time()
+    while True:
+        d = c.get(path).json()
+        if not d["progress"]["running"]:
+            return d
+        assert time.time() - t0 < timeout, "screener job did not finish"
+        path = path.split("?")[0]
+        time.sleep(0.2)
 
 
 def test_scale_and_inverse():
@@ -35,7 +57,7 @@ def test_fair_value_skips_dcf_for_banks_and_handles_missing():
 
 
 def test_signals_are_valid_everywhere():
-    for r in c.get("/api/screener").json()["rows"]:
+    for r in screen("/api/screener")["rows"]:
         for h in ("long", "medium", "short"):
             assert r["signals"][h]["signal"] in {"BUY", "HOLD", "SELL"}
         assert r["score"] is None or 0 <= r["score"] <= 100
@@ -144,13 +166,13 @@ def test_financials_endpoint_demo():
 def test_peers_endpoint():
     p = c.get("/api/peers/TCS").json()
     assert p["sector"] == "Technology" and p["peers"] and all(r["sector"] == "Technology" for r in p["peers"])
-    assert "TCS.NS" not in [r["symbol"] for r in p["peers"]] and p["self"]["symbol"] == "TCS.NS"
+    assert "TCS.NS" not in [r["symbol"] for r in p["peers"]] and p["self"]["symbol"] == "TCS.NS" and p["pool"] == 4
     assert p["median"]["pe"] is not None and "pb" in p["peers"][0]
 
 
 def test_screener_records_signal_history():
-    s = c.get("/api/screener?refresh=true").json()
-    assert "changes" in s and isinstance(s["changes"], list)
+    s = screen("/api/screener?refresh=true")
+    assert "changes" in s and isinstance(s["changes"], list) and len(s["rows"]) == 12 and not s["failed"]
     f = data.HOME / f"signal_history_{data.mode()}.json"
     assert f.exists() and len(json.loads(f.read_text())["last"]) == len(s["rows"])
     assert isinstance(c.get("/api/stock/TCS").json()["history"], list)
@@ -190,7 +212,7 @@ def test_etf_detail_page_shape():
 
 
 def test_etf_screener_and_peers():
-    e = c.get("/api/etfs").json()
+    e = screen("/api/etfs")
     assert len(e["rows"]) >= 30 and not e["failed"] and "Commodity" in e["categories"]
     r = next(x for x in e["rows"] if x["symbol"] == "NIFTYBEES.NS")
     assert r["kind"] == "etf" and r["role"] == "core" and r["vs_nifty_1y"] is not None and r["avg_traded_value"] is not None
@@ -218,3 +240,81 @@ def test_benchmark_is_aligned_to_instrument_last_date():
     a = analysis.analyze_etf(stale, {"name": "x", "avg_volume": 1e6}, bench, {"role": "core", "index": "Nifty 50", "category": "Broad"})
     expect = float(bench["Close"][:stale.index[-1]].iloc[-1] / bench["Close"][:stale.index[-1]].iloc[-22] - 1)
     assert abs(a["bench_returns"]["1M"] - expect) < 1e-9
+
+
+def test_bundled_nifty500_universe():
+    rows = universe._read_csv(universe.BUNDLED)
+    syms = {r["symbol"] for r in rows}
+    assert len(rows) >= 480 and {"RELIANCE", "TCS", "HDFCBANK", "PERSISTENT"} <= syms
+    groups = {r["group"] for r in rows}
+    assert groups == set(universe.GROUPS)
+    assert all(r["sector"] and r["industry"] for r in rows)
+    # the test override is active, so the app itself sees the small universe
+    assert c.get("/api/status").json()["universe_size"] == 12 and universe.groups() == ["Nifty 50", "Nifty Next 50", "Midcap 150"]
+
+
+def test_screener_reports_progress_and_group():
+    d = screen("/api/screener")
+    assert d["progress"] == {"done": 12, "total": 12, "running": False}
+    r = next(x for x in d["rows"] if x["symbol"] == "CDSL.NS")
+    assert r["group"] == "Midcap 150" and r["industry"] == "Financial Services" and "dividend_yield" in r and "fv_confidence" in r
+    assert c.get("/api/stock/CDSL").json()["group"] == "Midcap 150"
+
+
+def test_fill_from_statements_derives_missing_ratios():
+    fin = {"annual": {"periods": ["Mar 2024", "Mar 2025"], "revenue": [1000.0, 1200.0], "net_income": [100.0, 150.0], "operating_income": [150.0, 200.0],
+                      "equity": [800.0, 1000.0], "total_debt": [300.0, 250.0], "current_assets": [400.0, 450.0], "current_liabilities": [200.0, 300.0],
+                      "operating_cash_flow": [180.0, 210.0], "capex": [-60.0, -70.0], "shares_out": [10.0, 10.0]},
+           "quarterly": {"periods": ["Jun 2024", "Sep 2024", "Dec 2024", "Mar 2025"], "revenue": [280.0, 300.0, 310.0, 330.0], "net_income": [30.0, 40.0, 35.0, 45.0]}}
+    info = {"sector": "Technology", "price": 500.0, "pe": None, "roe": None, "profit_margin": None, "debt_to_equity": 0.3, "fundamentals_ok": False}
+    out = data.fill_from_statements(info, fin)
+    assert out["roe"] == 150 / 1000 and out["profit_margin"] == 150 / 1220 and out["debt_to_equity"] == 0.3    # existing value kept
+    assert out["current_ratio"] == 1.5 and out["fcf"] == 140.0 and out["eps"] == 15.0 and out["book_value"] == 100.0
+    assert abs(out["revenue_growth"] - 0.2) < 1e-9 and abs(out["earnings_growth"] - 0.5) < 1e-9
+    assert out["pe"] == 500 / 15 and out["fundamentals_ok"] is True and "roe" in out["derived"] and "debt_to_equity" not in out["derived"]
+    bank = data.fill_from_statements({"sector": "Financial Services", "price": 100.0}, fin)
+    assert bank.get("debt_to_equity") is None and bank.get("fcf") is None and bank["roe"] == 0.15
+    assert data.fill_from_statements({"roe": None}, {"annual": {"periods": []}}) == {"roe": None}
+
+
+def test_extras_endpoint_demo():
+    x = c.get("/api/extras/TCS").json()
+    assert x["kind"] == "stock" and x["earnings"]["next_date"] and len(x["earnings"]["history"]) == 6
+    assert x["dividends"]["yield"] > 0 and len(x["dividends"]["history"]) == 5 and x["news"]
+    assert x["consensus"]["key"] in {"strong_buy", "buy", "hold", "underperform"} and 0 < x["holders"]["insiders"] < 1
+    assert c.get("/api/extras/GOLDBEES").json()["kind"] == "etf"
+    assert "Street view" in json.dumps(c.get("/api/stock/TCS").json()["signals"]["long"]["reasons"])
+
+
+def test_momentum_backtest_group_param():
+    b = c.get("/api/backtest/momentum?top_n=3&lookback_months=3&group=Nifty%2050").json()
+    assert b["group"] == "Nifty 50" and b["universe_size"] == 10 and b["groups"][0] == "Nifty 50"
+    assert c.get("/api/backtest/momentum?top_n=3&lookback_months=3&group=nonsense").json()["group"] == "Nifty 50"
+
+
+def test_retry_backs_off_on_rate_limit(monkeypatch):
+    class YFRateLimitError(Exception):
+        pass
+    sleeps, calls = [], []
+    monkeypatch.setattr(data.time, "sleep", lambda t: sleeps.append(t))
+    def flaky():
+        calls.append(1)
+        if len(calls) < 3:
+            raise YFRateLimitError("Too Many Requests")
+        return "ok"
+    assert data._retry(flaky) == "ok" and sleeps == [4, 12]
+    def other():
+        raise ValueError("bad symbol")
+    try:
+        data._retry(other)
+        assert False
+    except ValueError:
+        pass
+    assert data.rate_limited(YFRateLimitError("x")) and not data.rate_limited(ValueError("x"))
+
+
+def test_price_only_stock_gets_hold_not_buy():
+    df = data.get_history("TCS.NS")
+    a = analysis.analyze_frame(df, {"name": "X", "fundamentals_ok": False, "price": float(df["Close"].iloc[-1])})
+    assert a["overall"] is None and a["signals"]["long"]["signal"] == "HOLD" and a["signals"]["long"]["score"] is None
+    assert "No fundamentals" in a["signals"]["long"]["reasons"][0][1]

@@ -1,37 +1,22 @@
-"""Stock and ETF universes. Default stocks = large-cap Indian stocks (approx. Nifty 50); default ETFs = the
-liquid NSE-listed index, factor, sector, international and commodity ETFs.
-Index membership changes over time: override by creating ~/.stockpro/universe.csv (`symbol,name,sector`)
+"""Stock and ETF universes. Default stocks = the Nifty 500 (bundled `nifty500.csv`, from the official NSE index
+constituent lists, with the index group each stock belongs to: Nifty 50 / Next 50 / Midcap 150 / Smallcap 250);
+default ETFs = the liquid NSE-listed index, factor, sector, international and commodity ETFs.
+Index membership changes over time: override by creating ~/.stockpro/universe.csv (`symbol,name,sector[,industry,group]`)
 or ~/.stockpro/etfs.csv (`symbol,name,category,index,role`), symbols without the .NS suffix.
 Yahoo Finance tags Indian ETFs as ordinary equities, so this list is how the app knows a ticker is an ETF."""
 from __future__ import annotations
 import csv
+from pathlib import Path
 from . import data
 
-FS, TECH, EN, CD, CC, HC, IND, BM, COM, UT = (
-    "Financial Services", "Technology", "Energy", "Consumer Defensive", "Consumer Cyclical",
-    "Healthcare", "Industrials", "Basic Materials", "Communication Services", "Utilities")
+BUNDLED = Path(__file__).parent / "nifty500.csv"
+GROUPS = ("Nifty 50", "Nifty Next 50", "Midcap 150", "Smallcap 250")
+_cache: dict = {}
 
-DEFAULT = [
-    ("RELIANCE", "Reliance Industries", EN), ("TCS", "Tata Consultancy Services", TECH),
-    ("HDFCBANK", "HDFC Bank", FS), ("ICICIBANK", "ICICI Bank", FS), ("INFY", "Infosys", TECH),
-    ("BHARTIARTL", "Bharti Airtel", COM), ("ITC", "ITC", CD), ("SBIN", "State Bank of India", FS),
-    ("LT", "Larsen & Toubro", IND), ("KOTAKBANK", "Kotak Mahindra Bank", FS),
-    ("HINDUNILVR", "Hindustan Unilever", CD), ("AXISBANK", "Axis Bank", FS),
-    ("BAJFINANCE", "Bajaj Finance", FS), ("M&M", "Mahindra & Mahindra", CC),
-    ("MARUTI", "Maruti Suzuki", CC), ("SUNPHARMA", "Sun Pharma", HC), ("HCLTECH", "HCL Technologies", TECH),
-    ("NTPC", "NTPC", UT), ("TITAN", "Titan Company", CC), ("ONGC", "ONGC", EN),
-    ("ADANIENT", "Adani Enterprises", IND), ("ULTRACEMCO", "UltraTech Cement", BM),
-    ("POWERGRID", "Power Grid Corp", UT), ("ASIANPAINT", "Asian Paints", BM),
-    ("BAJAJFINSV", "Bajaj Finserv", FS), ("WIPRO", "Wipro", TECH), ("NESTLEIND", "Nestle India", CD),
-    ("COALINDIA", "Coal India", EN), ("JSWSTEEL", "JSW Steel", BM), ("TATASTEEL", "Tata Steel", BM),
-    ("TECHM", "Tech Mahindra", TECH), ("GRASIM", "Grasim Industries", BM), ("HINDALCO", "Hindalco", BM),
-    ("INDUSINDBK", "IndusInd Bank", FS), ("CIPLA", "Cipla", HC), ("DRREDDY", "Dr. Reddy's", HC),
-    ("EICHERMOT", "Eicher Motors", CC), ("APOLLOHOSP", "Apollo Hospitals", HC), ("BPCL", "BPCL", EN),
-    ("BRITANNIA", "Britannia", CD), ("HEROMOTOCO", "Hero MotoCorp", CC), ("SBILIFE", "SBI Life", FS),
-    ("HDFCLIFE", "HDFC Life", FS), ("TRENT", "Trent", CC), ("ADANIPORTS", "Adani Ports", IND),
-    ("BAJAJ-AUTO", "Bajaj Auto", CC), ("SHRIRAMFIN", "Shriram Finance", FS), ("ETERNAL", "Eternal (Zomato)", CC),
-    ("JIOFIN", "Jio Financial Services", FS), ("TATACONSUM", "Tata Consumer Products", CD),
-]
+
+def _read_csv(p: Path) -> list[dict]:
+    with open(p, newline="", encoding="utf-8-sig") as f:
+        return [{k.strip(): (v or "").strip() for k, v in r.items() if k} for r in csv.DictReader(f)]
 
 
 # ETF categories and the role each usually plays in a portfolio
@@ -79,12 +64,26 @@ def lookup_etf(symbol: str) -> dict | None:
 
 
 def load_universe() -> list[dict]:
+    """Stock universe, re-read only when the CSV changes (the screener and search call this constantly)."""
     p = data.HOME / "universe.csv"
-    rows = DEFAULT
-    if p.exists():
-        with open(p, newline="") as f:
-            rows = [(r["symbol"].strip(), r.get("name", r["symbol"]), r.get("sector", "")) for r in csv.DictReader(f)]
-    return [{"symbol": data.normalize(s), "short": s, "name": n, "sector": sec, "kind": "stock"} for s, n, sec in rows]
+    src = p if p.exists() else BUNDLED
+    mtime = src.stat().st_mtime
+    hit = _cache.get("stocks")
+    if hit and hit[0] == (str(src), mtime):
+        return hit[1]
+    rows = []
+    for r in _read_csv(src):
+        if not r.get("symbol"):
+            continue
+        rows.append({"symbol": data.normalize(r["symbol"]), "short": r["symbol"], "name": r.get("name") or r["symbol"],
+                     "sector": r.get("sector", ""), "industry": r.get("industry", ""), "group": r.get("group") or "Custom", "kind": "stock"})
+    _cache["stocks"] = ((str(src), mtime), rows)
+    return rows
+
+
+def groups() -> list[str]:
+    seen = {u["group"] for u in load_universe()}
+    return [g for g in GROUPS if g in seen] + sorted(g for g in seen if g not in GROUPS)
 
 
 def lookup(symbol: str) -> dict | None:

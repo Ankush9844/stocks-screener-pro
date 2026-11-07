@@ -215,8 +215,14 @@ def long_signal(info, tech, fv, p):
             reasons.append(("neu", "Fair value models disagree (Low confidence), so valuation does not override the score here."))
     at = info.get("target_mean")
     if at and tech["price"]:
-        reasons.append(("neu", f"Analyst mean target {at:.0f} ({_pct(at / tech['price'] - 1, 0)} vs price)"))
-    if score is None:
+        cons = info.get("consensus")
+        who = f"{int(info['analysts'])} analysts" if info.get("analysts") else "analysts"
+        label = {"strong_buy": "Strong buy", "buy": "Buy", "hold": "Hold", "underperform": "Underperform", "sell": "Sell"}.get(cons or "", "")
+        reasons.append(("neu", f"Street view: {label + ' consensus, ' if label else ''}mean target {at:.0f} ({_pct(at / tech['price'] - 1, 0)} vs price) from {who}. Analysts chase prices too, so weigh it lightly."))
+    if info.get("fundamentals_ok") is False:
+        score, sig = None, "HOLD"
+        reasons.insert(0, ("neg", "No fundamentals available for this ticker, so there is no basis for a long-term verdict."))
+    elif score is None:
         sig = "HOLD"
     elif score >= 65 and (mos is None or mos >= 0.10):
         sig = "BUY"
@@ -313,10 +319,11 @@ def analyze_frame(df: pd.DataFrame, info: dict, bench_df: pd.DataFrame | None = 
     sigs = {"long": long_signal(info, tech, fv, p), "medium": medium_signal(info, tech, fv, p, bench_tech), "short": short_signal(info, tech)}
     keys = ("name", "sector", "industry", "currency", "market_cap", "pe", "forward_pe", "pb", "roe", "roa", "debt_to_equity",
             "current_ratio", "profit_margin", "op_margin", "revenue_growth", "earnings_growth", "eps", "book_value",
-            "dividend_yield", "beta", "target_mean", "analysts", "fundamentals_ok")
+            "dividend_yield", "beta", "target_mean", "target_high", "target_low", "analysts", "fundamentals_ok",
+            "consensus", "consensus_mean", "next_earnings", "ps", "ev_ebitda", "peg", "insiders", "institutions", "derived", "fetched_at")
     return {"price": price, "change_1d": tech["change_1d"], "info": {k: info.get(k) for k in keys},
             "tech": tech, "fair_value": fv, "pillars": p,
-            "overall": weighted(p, WEIGHTS["long"]), "signals": sigs}
+            "overall": None if info.get("fundamentals_ok") is False else weighted(p, WEIGHTS["long"]), "signals": sigs}
 
 
 # ------------------------------------------------------------------ ETFs (price-only analysis + portfolio role)

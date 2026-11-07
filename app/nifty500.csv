@@ -1,0 +1,501 @@
+symbol,name,sector,industry,group
+ADANIENT,Adani Enterprises,Basic Materials,Metals & Mining,Nifty 50
+ADANIPORTS,Adani Ports and Special Economic Zone,Industrials,Services,Nifty 50
+APOLLOHOSP,Apollo Hospitals Enterprise,Healthcare,Healthcare,Nifty 50
+ASIANPAINT,Asian Paints,Consumer Cyclical,Consumer Durables,Nifty 50
+AXISBANK,Axis Bank,Financial Services,Financial Services,Nifty 50
+BAJAJ-AUTO,Bajaj Auto,Consumer Cyclical,Automobile and Auto Components,Nifty 50
+BAJAJFINSV,Bajaj Finserv,Financial Services,Financial Services,Nifty 50
+BAJFINANCE,Bajaj Finance,Financial Services,Financial Services,Nifty 50
+BEL,Bharat Electronics,Industrials,Capital Goods,Nifty 50
+BHARTIARTL,Bharti Airtel,Communication Services,Telecommunication,Nifty 50
+BSE,BSE,Financial Services,Financial Services,Nifty 50
+CIPLA,Cipla,Healthcare,Healthcare,Nifty 50
+COALINDIA,Coal India,Energy,Oil Gas & Consumable Fuels,Nifty 50
+DRREDDY,Dr. Reddy's Laboratories,Healthcare,Healthcare,Nifty 50
+EICHERMOT,Eicher Motors,Consumer Cyclical,Automobile and Auto Components,Nifty 50
+ETERNAL,Eternal,Consumer Cyclical,Consumer Services,Nifty 50
+GRASIM,Grasim Industries,Basic Materials,Construction Materials,Nifty 50
+HCLTECH,HCL Technologies,Technology,Information Technology,Nifty 50
+HDFCBANK,HDFC Bank,Financial Services,Financial Services,Nifty 50
+HDFCLIFE,HDFC Life Insurance Company,Financial Services,Financial Services,Nifty 50
+HINDALCO,Hindalco Industries,Basic Materials,Metals & Mining,Nifty 50
+HINDUNILVR,Hindustan Unilever,Consumer Defensive,Fast Moving Consumer Goods,Nifty 50
+ICICIBANK,ICICI Bank,Financial Services,Financial Services,Nifty 50
+INDIGO,InterGlobe Aviation,Industrials,Services,Nifty 50
+INFY,Infosys,Technology,Information Technology,Nifty 50
+ITC,ITC,Consumer Defensive,Fast Moving Consumer Goods,Nifty 50
+JIOFIN,Jio Financial Services,Financial Services,Financial Services,Nifty 50
+JSWSTEEL,JSW Steel,Basic Materials,Metals & Mining,Nifty 50
+KOTAKBANK,Kotak Mahindra Bank,Financial Services,Financial Services,Nifty 50
+LT,Larsen & Toubro,Industrials,Construction,Nifty 50
+M&M,Mahindra & Mahindra,Consumer Cyclical,Automobile and Auto Components,Nifty 50
+MARUTI,Maruti Suzuki India,Consumer Cyclical,Automobile and Auto Components,Nifty 50
+MAXHEALTH,Max Healthcare Institute,Healthcare,Healthcare,Nifty 50
+NESTLEIND,Nestle India,Consumer Defensive,Fast Moving Consumer Goods,Nifty 50
+NTPC,NTPC,Utilities,Power,Nifty 50
+ONGC,Oil & Natural Gas Corporation,Energy,Oil Gas & Consumable Fuels,Nifty 50
+POWERGRID,Power Grid Corporation of India,Utilities,Power,Nifty 50
+RELIANCE,Reliance Industries,Energy,Oil Gas & Consumable Fuels,Nifty 50
+SBILIFE,SBI Life Insurance Company,Financial Services,Financial Services,Nifty 50
+SBIN,State Bank of India,Financial Services,Financial Services,Nifty 50
+SHRIRAMFIN,Shriram Finance,Financial Services,Financial Services,Nifty 50
+SUNPHARMA,Sun Pharmaceutical Industries,Healthcare,Healthcare,Nifty 50
+TATACONSUM,Tata Consumer Products,Consumer Defensive,Fast Moving Consumer Goods,Nifty 50
+TATASTEEL,Tata Steel,Basic Materials,Metals & Mining,Nifty 50
+TCS,Tata Consultancy Services,Technology,Information Technology,Nifty 50
+TECHM,Tech Mahindra,Technology,Information Technology,Nifty 50
+TITAN,Titan Company,Consumer Cyclical,Consumer Durables,Nifty 50
+TMPV,Tata Motors Passenger Vehicles,Consumer Cyclical,Automobile and Auto Components,Nifty 50
+TRENT,Trent,Consumer Cyclical,Consumer Services,Nifty 50
+ULTRACEMCO,UltraTech Cement,Basic Materials,Construction Materials,Nifty 50
+ABB,ABB India,Industrials,Capital Goods,Nifty Next 50
+ADANIENSOL,Adani Energy Solutions,Utilities,Power,Nifty Next 50
+ADANIGREEN,Adani Green Energy,Utilities,Power,Nifty Next 50
+ADANIPOWER,Adani Power,Utilities,Power,Nifty Next 50
+AMBUJACEM,Ambuja Cements,Basic Materials,Construction Materials,Nifty Next 50
+BAJAJHLDNG,Bajaj Holdings & Investment,Financial Services,Financial Services,Nifty Next 50
+BANKBARODA,Bank of Baroda,Financial Services,Financial Services,Nifty Next 50
+BOSCHLTD,Bosch,Consumer Cyclical,Automobile and Auto Components,Nifty Next 50
+BPCL,Bharat Petroleum Corporation,Energy,Oil Gas & Consumable Fuels,Nifty Next 50
+BRITANNIA,Britannia Industries,Consumer Defensive,Fast Moving Consumer Goods,Nifty Next 50
+CANBK,Canara Bank,Financial Services,Financial Services,Nifty Next 50
+CGPOWER,CG Power and Industrial Solutions,Industrials,Capital Goods,Nifty Next 50
+CHOLAFIN,Cholamandalam Investment and Finance Company,Financial Services,Financial Services,Nifty Next 50
+CUMMINSIND,Cummins India,Industrials,Capital Goods,Nifty Next 50
+DIVISLAB,Divi's Laboratories,Healthcare,Healthcare,Nifty Next 50
+DLF,DLF,Real Estate,Realty,Nifty Next 50
+DMART,Avenue Supermarts,Consumer Cyclical,Consumer Services,Nifty Next 50
+ENRIN,Siemens Energy India,Industrials,Capital Goods,Nifty Next 50
+GAIL,GAIL (India),Energy,Oil Gas & Consumable Fuels,Nifty Next 50
+GODREJCP,Godrej Consumer Products,Consumer Defensive,Fast Moving Consumer Goods,Nifty Next 50
+HAL,Hindustan Aeronautics,Industrials,Capital Goods,Nifty Next 50
+HDFCAMC,HDFC Asset Management Company,Financial Services,Financial Services,Nifty Next 50
+HINDZINC,Hindustan Zinc,Basic Materials,Metals & Mining,Nifty Next 50
+HYUNDAI,Hyundai Motor India,Consumer Cyclical,Automobile and Auto Components,Nifty Next 50
+IDEA,Vodafone Idea,Communication Services,Telecommunication,Nifty Next 50
+IOC,Indian Oil Corporation,Energy,Oil Gas & Consumable Fuels,Nifty Next 50
+IRFC,Indian Railway Finance Corporation,Financial Services,Financial Services,Nifty Next 50
+JINDALSTEL,Jindal Steel,Basic Materials,Metals & Mining,Nifty Next 50
+LTM,LTM,Technology,Information Technology,Nifty Next 50
+MAZDOCK,Mazagoan Dock Shipbuilders,Industrials,Capital Goods,Nifty Next 50
+MOTHERSON,Samvardhana Motherson International,Consumer Cyclical,Automobile and Auto Components,Nifty Next 50
+MUTHOOTFIN,Muthoot Finance,Financial Services,Financial Services,Nifty Next 50
+PFC,Power Finance Corporation,Financial Services,Financial Services,Nifty Next 50
+PIDILITIND,Pidilite Industries,Basic Materials,Chemicals,Nifty Next 50
+PNB,Punjab National Bank,Financial Services,Financial Services,Nifty Next 50
+POLYCAB,Polycab India,Industrials,Capital Goods,Nifty Next 50
+POWERINDIA,Hitachi Energy India,Industrials,Capital Goods,Nifty Next 50
+SIEMENS,Siemens,Industrials,Capital Goods,Nifty Next 50
+SOLARINDS,Solar Industries India,Basic Materials,Chemicals,Nifty Next 50
+TATACAP,Tata Capital,Financial Services,Financial Services,Nifty Next 50
+TATAPOWER,Tata Power Co.,Utilities,Power,Nifty Next 50
+TMCV,Tata Motors,Industrials,Capital Goods,Nifty Next 50
+TORNTPHARM,Torrent Pharmaceuticals,Healthcare,Healthcare,Nifty Next 50
+TVSMOTOR,TVS Motor Company,Consumer Cyclical,Automobile and Auto Components,Nifty Next 50
+UNIONBANK,Union Bank of India,Financial Services,Financial Services,Nifty Next 50
+VAML,Vedanta Aluminium Metal,Basic Materials,Metals & Mining,Nifty Next 50
+VBL,Varun Beverages,Consumer Defensive,Fast Moving Consumer Goods,Nifty Next 50
+VEDL,Vedanta,Basic Materials,Metals & Mining,Nifty Next 50
+WIPRO,Wipro,Technology,Information Technology,Nifty Next 50
+ZYDUSLIFE,Zydus Lifesciences,Healthcare,Healthcare,Nifty Next 50
+360ONE,360 ONE WAM,Financial Services,Financial Services,Midcap 150
+ABBOTINDIA,Abbott India,Healthcare,Healthcare,Midcap 150
+ABCAPITAL,Aditya Birla Capital,Financial Services,Financial Services,Midcap 150
+AIAENG,AIA Engineering,Industrials,Capital Goods,Midcap 150
+AIIL,Authum Investment & Infrastructure,Financial Services,Financial Services,Midcap 150
+AJANTPHARM,Ajanta Pharmaceuticals,Healthcare,Healthcare,Midcap 150
+ALKEM,Alkem Laboratories,Healthcare,Healthcare,Midcap 150
+ANTHEM,Anthem Biosciences,Healthcare,Healthcare,Midcap 150
+APARINDS,Apar Industries,Industrials,Capital Goods,Midcap 150
+APLAPOLLO,APL Apollo Tubes,Industrials,Capital Goods,Midcap 150
+ASHOKLEY,Ashok Leyland,Industrials,Capital Goods,Midcap 150
+ASTERDM,Aster DM Quality Care,Healthcare,Healthcare,Midcap 150
+ASTRAL,Astral,Industrials,Capital Goods,Midcap 150
+ATGL,Adani Total Gas,Energy,Oil Gas & Consumable Fuels,Midcap 150
+AUBANK,AU Small Finance Bank,Financial Services,Financial Services,Midcap 150
+AUROPHARMA,Aurobindo Pharma,Healthcare,Healthcare,Midcap 150
+BAJAJHFL,Bajaj Housing Finance,Financial Services,Financial Services,Midcap 150
+BALKRISIND,Balkrishna Industries,Consumer Cyclical,Automobile and Auto Components,Midcap 150
+BANKINDIA,Bank of India,Financial Services,Financial Services,Midcap 150
+BDL,Bharat Dynamics,Industrials,Capital Goods,Midcap 150
+BERGEPAINT,Berger Paints India,Consumer Cyclical,Consumer Durables,Midcap 150
+BHARATFORG,Bharat Forge,Consumer Cyclical,Automobile and Auto Components,Midcap 150
+BHARTIHEXA,Bharti Hexacom,Communication Services,Telecommunication,Midcap 150
+BHEL,Bharat Heavy Electricals,Industrials,Capital Goods,Midcap 150
+BIOCON,Biocon,Healthcare,Healthcare,Midcap 150
+BLUESTARCO,Blue Star,Consumer Cyclical,Consumer Durables,Midcap 150
+COCHINSHIP,Cochin Shipyard,Industrials,Capital Goods,Midcap 150
+COFORGE,Coforge,Technology,Information Technology,Midcap 150
+COLPAL,Colgate Palmolive (India),Consumer Defensive,Fast Moving Consumer Goods,Midcap 150
+CONCOR,Container Corporation of India,Industrials,Services,Midcap 150
+COROMANDEL,Coromandel International,Basic Materials,Chemicals,Midcap 150
+CRISIL,CRISIL,Financial Services,Financial Services,Midcap 150
+DABUR,Dabur India,Consumer Defensive,Fast Moving Consumer Goods,Midcap 150
+DALBHARAT,Dalmia Bharat,Basic Materials,Construction Materials,Midcap 150
+DIXON,Dixon Technologies (India),Consumer Cyclical,Consumer Durables,Midcap 150
+EMBASSY,EMBASSY OFFICE PARKS REIT,Real Estate,Realty,Midcap 150
+ENDURANCE,Endurance Technologies,Consumer Cyclical,Automobile and Auto Components,Midcap 150
+ESCORTS,Escorts Kubota,Industrials,Capital Goods,Midcap 150
+EXIDEIND,Exide Industries,Consumer Cyclical,Automobile and Auto Components,Midcap 150
+FACT,Fertilisers and Chemicals Travancore,Basic Materials,Chemicals,Midcap 150
+FEDERALBNK,Federal Bank,Financial Services,Financial Services,Midcap 150
+FLUOROCHEM,Gujarat Fluorochemicals,Basic Materials,Chemicals,Midcap 150
+FORTIS,Fortis Healthcare,Healthcare,Healthcare,Midcap 150
+GICRE,General Insurance Corporation of India,Financial Services,Financial Services,Midcap 150
+GLAXO,Glaxosmithkline Pharmaceuticals,Healthcare,Healthcare,Midcap 150
+GLENMARK,Glenmark Pharmaceuticals,Healthcare,Healthcare,Midcap 150
+GMRAIRPORT,GMR Airports,Industrials,Services,Midcap 150
+GODFRYPHLP,Godfrey Phillips India,Consumer Defensive,Fast Moving Consumer Goods,Midcap 150
+GODREJIND,Godrej Industries,Industrials,Diversified,Midcap 150
+GODREJPROP,Godrej Properties,Real Estate,Realty,Midcap 150
+GROWW,Billionbrains Garage Ventures,Financial Services,Financial Services,Midcap 150
+GVT&D,GE Vernova T&D India,Industrials,Capital Goods,Midcap 150
+HAVELLS,Havells India,Consumer Cyclical,Consumer Durables,Midcap 150
+HDBFS,HDB Financial Services,Financial Services,Financial Services,Midcap 150
+HEROMOTOCO,Hero MotoCorp,Consumer Cyclical,Automobile and Auto Components,Midcap 150
+HEXT,Hexaware Technologies,Technology,Information Technology,Midcap 150
+HINDCOPPER,Hindustan Copper,Basic Materials,Metals & Mining,Midcap 150
+HINDPETRO,Hindustan Petroleum Corporation,Energy,Oil Gas & Consumable Fuels,Midcap 150
+HUDCO,Housing & Urban Development Corporation,Financial Services,Financial Services,Midcap 150
+ICICIAMC,ICICI Prudential Asset Management Company,Financial Services,Financial Services,Midcap 150
+ICICIGI,ICICI Lombard General Insurance Company,Financial Services,Financial Services,Midcap 150
+ICICILIFE,ICICI Life Insurance,Financial Services,Financial Services,Midcap 150
+IDFCFIRSTB,IDFC First Bank,Financial Services,Financial Services,Midcap 150
+INDHOTEL,Indian Hotels Co.,Consumer Cyclical,Consumer Services,Midcap 150
+INDIANB,Indian Bank,Financial Services,Financial Services,Midcap 150
+INDUSINDBK,IndusInd Bank,Financial Services,Financial Services,Midcap 150
+INDUSTOWER,Indus Towers,Communication Services,Telecommunication,Midcap 150
+IOB,Indian Overseas Bank,Financial Services,Financial Services,Midcap 150
+IPCALAB,Ipca Laboratories,Healthcare,Healthcare,Midcap 150
+IRCTC,Indian Railway Catering And Tourism Corporation,Consumer Cyclical,Consumer Services,Midcap 150
+IREDA,Indian Renewable Energy Development Agency,Financial Services,Financial Services,Midcap 150
+ITCHOTELS,ITC Hotels,Consumer Cyclical,Consumer Services,Midcap 150
+JKCEMENT,J.K. Cement,Basic Materials,Construction Materials,Midcap 150
+JSL,Jindal Stainless,Basic Materials,Metals & Mining,Midcap 150
+JSWENERGY,JSW Energy,Utilities,Power,Midcap 150
+JSWINFRA,JSW Infrastructure,Industrials,Services,Midcap 150
+JUBLFOOD,Jubilant Foodworks,Consumer Cyclical,Consumer Services,Midcap 150
+KALYANKJIL,Kalyan Jewellers India,Consumer Cyclical,Consumer Durables,Midcap 150
+KEI,KEI Industries,Industrials,Capital Goods,Midcap 150
+KPRMILL,K.P.R. Mill,Consumer Cyclical,Textiles,Midcap 150
+LAURUSLABS,Laurus Labs,Healthcare,Healthcare,Midcap 150
+LENSKART,Lenskart Solutions,Consumer Cyclical,Consumer Services,Midcap 150
+LGEINDIA,LG Electronics India,Consumer Cyclical,Consumer Durables,Midcap 150
+LICHSGFIN,LIC Housing Finance,Financial Services,Financial Services,Midcap 150
+LICI,Life Insurance Corporation of India,Financial Services,Financial Services,Midcap 150
+LINDEINDIA,Linde India,Basic Materials,Chemicals,Midcap 150
+LLOYDSME,Lloyds Metals And Energy,Basic Materials,Metals & Mining,Midcap 150
+LODHA,Lodha Developers,Real Estate,Realty,Midcap 150
+LTF,L&T Finance,Financial Services,Financial Services,Midcap 150
+LTTS,L&T Technology Services,Technology,Information Technology,Midcap 150
+LUPIN,Lupin,Healthcare,Healthcare,Midcap 150
+M&MFIN,Mahindra & Mahindra Financial Services,Financial Services,Financial Services,Midcap 150
+MAHABANK,Bank of Maharashtra,Financial Services,Financial Services,Midcap 150
+MANKIND,Mankind Pharma,Healthcare,Healthcare,Midcap 150
+MARICO,Marico,Consumer Defensive,Fast Moving Consumer Goods,Midcap 150
+MCX,Multi Commodity Exchange of India,Financial Services,Financial Services,Midcap 150
+MEDANTA,Global Health,Healthcare,Healthcare,Midcap 150
+MEESHO,Meesho,Consumer Cyclical,Consumer Services,Midcap 150
+MFSL,Max Financial Services,Financial Services,Financial Services,Midcap 150
+MOTILALOFS,Motilal Oswal Financial Services,Financial Services,Financial Services,Midcap 150
+MPHASIS,MphasiS,Technology,Information Technology,Midcap 150
+MRF,MRF,Consumer Cyclical,Automobile and Auto Components,Midcap 150
+NAM-INDIA,Nippon Life India Asset Management,Financial Services,Financial Services,Midcap 150
+NATIONALUM,National Aluminium Co.,Basic Materials,Metals & Mining,Midcap 150
+NAUKRI,Info Edge (India),Consumer Cyclical,Consumer Services,Midcap 150
+NH,Narayana Hrudayalaya,Healthcare,Healthcare,Midcap 150
+NHPC,NHPC,Utilities,Power,Midcap 150
+NLCINDIA,NLC India,Utilities,Power,Midcap 150
+NMDC,NMDC,Basic Materials,Metals & Mining,Midcap 150
+NTPCGREEN,NTPC Green Energy,Utilities,Power,Midcap 150
+NYKAA,FSN E-Commerce Ventures,Consumer Cyclical,Consumer Services,Midcap 150
+OBEROIRLTY,Oberoi Realty,Real Estate,Realty,Midcap 150
+OFSS,Oracle Financial Services Software,Technology,Information Technology,Midcap 150
+OIL,Oil India,Energy,Oil Gas & Consumable Fuels,Midcap 150
+PAGEIND,Page Industries,Consumer Cyclical,Textiles,Midcap 150
+PATANJALI,Patanjali Foods,Consumer Defensive,Fast Moving Consumer Goods,Midcap 150
+PAYTM,One 97 Communications,Financial Services,Financial Services,Midcap 150
+PERSISTENT,Persistent Systems,Technology,Information Technology,Midcap 150
+PETRONET,Petronet LNG,Energy,Oil Gas & Consumable Fuels,Midcap 150
+PHOENIXLTD,Phoenix Mills,Real Estate,Realty,Midcap 150
+PIIND,PI Industries,Basic Materials,Chemicals,Midcap 150
+PIRAMALFIN,Piramal Finance,Financial Services,Financial Services,Midcap 150
+POLICYBZR,PB Fintech,Financial Services,Financial Services,Midcap 150
+PREMIERENE,Premier Energies,Industrials,Capital Goods,Midcap 150
+PRESTIGE,Prestige Estates Projects,Real Estate,Realty,Midcap 150
+RADICO,Radico Khaitan,Consumer Defensive,Fast Moving Consumer Goods,Midcap 150
+RECLTD,REC,Financial Services,Financial Services,Midcap 150
+RVNL,Rail Vikas Nigam,Industrials,Construction,Midcap 150
+SAIL,Steel Authority of India,Basic Materials,Metals & Mining,Midcap 150
+SBICARD,SBI Cards and Payment Services,Financial Services,Financial Services,Midcap 150
+SCHAEFFLER,Schaeffler India,Consumer Cyclical,Automobile and Auto Components,Midcap 150
+SHREECEM,Shree Cement,Basic Materials,Construction Materials,Midcap 150
+SRF,SRF,Basic Materials,Chemicals,Midcap 150
+SUNDARMFIN,Sundaram Finance,Financial Services,Financial Services,Midcap 150
+SUPREMEIND,Supreme Industries,Industrials,Capital Goods,Midcap 150
+SUZLON,Suzlon Energy,Industrials,Capital Goods,Midcap 150
+SWIGGY,Swiggy,Consumer Cyclical,Consumer Services,Midcap 150
+TATACOMM,Tata Communications,Communication Services,Telecommunication,Midcap 150
+TATAINVEST,Tata Investment Corporation,Financial Services,Financial Services,Midcap 150
+THERMAX,Thermax,Industrials,Capital Goods,Midcap 150
+TIINDIA,Tube Investments of India,Consumer Cyclical,Automobile and Auto Components,Midcap 150
+TORNTPOWER,Torrent Power,Utilities,Power,Midcap 150
+UBL,United Breweries,Consumer Defensive,Fast Moving Consumer Goods,Midcap 150
+UNITDSPR,United Spirits,Consumer Defensive,Fast Moving Consumer Goods,Midcap 150
+UNOMINDA,UNO Minda,Consumer Cyclical,Automobile and Auto Components,Midcap 150
+UPL,UPL,Basic Materials,Chemicals,Midcap 150
+VMM,Vishal Mega Mart,Consumer Cyclical,Consumer Services,Midcap 150
+VOLTAS,Voltas,Consumer Cyclical,Consumer Durables,Midcap 150
+WAAREEENER,Waaree Energies,Industrials,Capital Goods,Midcap 150
+YESBANK,Yes Bank,Financial Services,Financial Services,Midcap 150
+AADHARHFC,Aadhar Housing Finance,Financial Services,Financial Services,Smallcap 250
+AARTIIND,Aarti Industries,Basic Materials,Chemicals,Smallcap 250
+AAVAS,Aavas Financiers,Financial Services,Financial Services,Smallcap 250
+ABDL,Allied Blenders and Distillers,Consumer Defensive,Fast Moving Consumer Goods,Smallcap 250
+ABREL,Aditya Birla Real Estate,Real Estate,Realty,Smallcap 250
+ABSLAMC,Aditya Birla Sun Life AMC,Financial Services,Financial Services,Smallcap 250
+ACC,ACC,Basic Materials,Construction Materials,Smallcap 250
+ACE,Action Construction Equipment,Industrials,Capital Goods,Smallcap 250
+ACMESOLAR,ACME Solar Holdings,Utilities,Power,Smallcap 250
+ACUTAAS,Acutaas Chemicals,Healthcare,Healthcare,Smallcap 250
+AEGISLOG,Aegis Logistics,Energy,Oil Gas & Consumable Fuels,Smallcap 250
+AEGISVOPAK,Aegis Vopak Terminals,Energy,Oil Gas & Consumable Fuels,Smallcap 250
+AETHER,Aether Industries,Basic Materials,Chemicals,Smallcap 250
+AFCONS,Afcons Infrastructure,Industrials,Construction,Smallcap 250
+AFFLE,Affle 3i,Technology,Information Technology,Smallcap 250
+AMBER,Amber Enterprises India,Consumer Cyclical,Consumer Durables,Smallcap 250
+ANANDRATHI,Anand Rathi Wealth,Financial Services,Financial Services,Smallcap 250
+ANANTRAJ,Anant Raj,Real Estate,Realty,Smallcap 250
+ANGELONE,Angel One,Financial Services,Financial Services,Smallcap 250
+ANURAS,Anupam Rasayan India,Basic Materials,Chemicals,Smallcap 250
+APOLLOTYRE,Apollo Tyres,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+APTUS,Aptus Value Housing Finance India,Financial Services,Financial Services,Smallcap 250
+ARE&M,Amara Raja Energy & Mobility,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+ASAHIINDIA,Asahi India Glass,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+ATHERENERG,Ather Energy,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+ATUL,Atul,Basic Materials,Chemicals,Smallcap 250
+AVANTIFEED,Avanti Feeds,Consumer Defensive,Fast Moving Consumer Goods,Smallcap 250
+AWL,AWL Agri Business,Consumer Defensive,Fast Moving Consumer Goods,Smallcap 250
+AZAD,Azad Engineering,Industrials,Capital Goods,Smallcap 250
+BAGMANE,Bagmane Prime Office REIT,Real Estate,Realty,Smallcap 250
+BALRAMCHIN,Balrampur Chini Mills,Consumer Defensive,Fast Moving Consumer Goods,Smallcap 250
+BANDHANBNK,Bandhan Bank,Financial Services,Financial Services,Smallcap 250
+BATAINDIA,Bata India,Consumer Cyclical,Consumer Durables,Smallcap 250
+BBOX,Black Box,Technology,Information Technology,Smallcap 250
+BELRISE,Belrise Industries,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+BEML,BEML,Industrials,Capital Goods,Smallcap 250
+BHARATCOAL,Bharat Coking Coal,Energy,Oil Gas & Consumable Fuels,Smallcap 250
+BIRET,Brookfield India Real Estate Trust,Real Estate,Realty,Smallcap 250
+BLS,BLS International Services,Consumer Cyclical,Consumer Services,Smallcap 250
+BRIGADE,Brigade Enterprises,Real Estate,Realty,Smallcap 250
+BSOFT,Birlasoft,Technology,Information Technology,Smallcap 250
+CAMS,Computer Age Management Services,Financial Services,Financial Services,Smallcap 250
+CANFINHOME,Can Fin Homes,Financial Services,Financial Services,Smallcap 250
+CANHLIFE,Canara HSBC Life Insurance Company,Financial Services,Financial Services,Smallcap 250
+CAPLIPOINT,Caplin Point Laboratories,Healthcare,Healthcare,Smallcap 250
+CARBORUNIV,Carborundum Universal,Industrials,Capital Goods,Smallcap 250
+CARTRADE,Cartrade Tech,Consumer Cyclical,Consumer Services,Smallcap 250
+CASTROLIND,Castrol India,Energy,Oil Gas & Consumable Fuels,Smallcap 250
+CCL,CCL Products (I),Consumer Defensive,Fast Moving Consumer Goods,Smallcap 250
+CDSL,Central Depository Services (India),Financial Services,Financial Services,Smallcap 250
+CEATLTD,Ceat,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+CEMPRO,Cemindia Projects,Industrials,Construction,Smallcap 250
+CENTRALBK,Central Bank of India,Financial Services,Financial Services,Smallcap 250
+CESC,CESC,Utilities,Power,Smallcap 250
+CGCL,Capri Global Capital,Financial Services,Financial Services,Smallcap 250
+CHAMBLFERT,Chambal Fertilizers & Chemicals,Basic Materials,Chemicals,Smallcap 250
+CHENNPETRO,Chennai Petroleum Corporation,Energy,Oil Gas & Consumable Fuels,Smallcap 250
+CHOICEIN,Choice International,Financial Services,Financial Services,Smallcap 250
+CHOLAHLDNG,Cholamandalam Financial Holdings,Financial Services,Financial Services,Smallcap 250
+CIEINDIA,CIE Automotive India,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+CLEAN,Clean Science and Technology,Basic Materials,Chemicals,Smallcap 250
+CLEANMAX,Clean Max Enviro Energy Solutions,Utilities,Power,Smallcap 250
+CMPDI,Central Mine Planning & Design Institute,Industrials,Services,Smallcap 250
+COHANCE,Cohance Lifesciences,Healthcare,Healthcare,Smallcap 250
+CONCORDBIO,Concord Biotech,Healthcare,Healthcare,Smallcap 250
+CPPLUS,Aditya Infotech,Industrials,Capital Goods,Smallcap 250
+CRAFTSMAN,Craftsman Automation,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+CREDITACC,CreditAccess Grameen,Financial Services,Financial Services,Smallcap 250
+CROMPTON,Crompton Greaves Consumer Electricals,Consumer Cyclical,Consumer Durables,Smallcap 250
+CUB,City Union Bank,Financial Services,Financial Services,Smallcap 250
+CUPID,Cupid,Consumer Defensive,Fast Moving Consumer Goods,Smallcap 250
+CYIENT,Cyient,Technology,Information Technology,Smallcap 250
+DATAPATTNS,Data Patterns (India),Industrials,Capital Goods,Smallcap 250
+DEEPAKFERT,Deepak Fertilisers & Petrochemicals Corp.,Basic Materials,Chemicals,Smallcap 250
+DEEPAKNTR,Deepak Nitrite,Basic Materials,Chemicals,Smallcap 250
+DELHIVERY,Delhivery,Industrials,Services,Smallcap 250
+DEVYANI,Devyani International,Consumer Cyclical,Consumer Services,Smallcap 250
+DOMS,DOMS Industries,Consumer Defensive,Fast Moving Consumer Goods,Smallcap 250
+ECLERX,eClerx Services,Industrials,Services,Smallcap 250
+EIDPARRY,E.I.D. Parry (India),Consumer Defensive,Fast Moving Consumer Goods,Smallcap 250
+EIHOTEL,EIH,Consumer Cyclical,Consumer Services,Smallcap 250
+ELECON,Elecon Engineering Co.,Industrials,Capital Goods,Smallcap 250
+ELGIEQUIP,Elgi Equipments,Industrials,Capital Goods,Smallcap 250
+EMAMILTD,Emami,Consumer Defensive,Fast Moving Consumer Goods,Smallcap 250
+EMCURE,Emcure Pharmaceuticals,Healthcare,Healthcare,Smallcap 250
+EMMVEE,Emmvee Photovoltaic Power,Industrials,Capital Goods,Smallcap 250
+ENGINERSIN,Engineers India,Industrials,Construction,Smallcap 250
+FINCABLES,Finolex Cables,Industrials,Capital Goods,Smallcap 250
+FIRSTCRY,Brainbees Solutions,Consumer Cyclical,Consumer Services,Smallcap 250
+FIVESTAR,Five-Star Business Finance,Financial Services,Financial Services,Smallcap 250
+FORCEMOT,Force Motors,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+FRACTAL,Fractal Analytics,Technology,Information Technology,Smallcap 250
+FSL,Firstsource Solutions,Industrials,Services,Smallcap 250
+GABRIEL,Gabriel India,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+GALLANTT,Gallantt Ispat,Industrials,Capital Goods,Smallcap 250
+GESHIP,Great Eastern Shipping Co.,Industrials,Services,Smallcap 250
+GILLETTE,Gillette India,Consumer Defensive,Fast Moving Consumer Goods,Smallcap 250
+GLAND,Gland Pharma,Healthcare,Healthcare,Smallcap 250
+GMDCLTD,Gujarat Mineral Development Corporation,Basic Materials,Metals & Mining,Smallcap 250
+GPIL,Godawari Power & Ispat,Industrials,Capital Goods,Smallcap 250
+GRANULES,Granules India,Healthcare,Healthcare,Smallcap 250
+GRAPHITE,Graphite India,Industrials,Capital Goods,Smallcap 250
+GRAVITA,Gravita India,Basic Materials,Metals & Mining,Smallcap 250
+GRSE,Garden Reach Shipbuilders & Engineers,Industrials,Capital Goods,Smallcap 250
+HBLENGINE,HBL Engineering,Industrials,Capital Goods,Smallcap 250
+HEGAM,HEG Advanced Materials,Industrials,Capital Goods,Smallcap 250
+HFCL,HFCL,Communication Services,Telecommunication,Smallcap 250
+HOMEFIRST,Home First Finance Company India,Financial Services,Financial Services,Smallcap 250
+HONASA,Honasa Consumer,Consumer Defensive,Fast Moving Consumer Goods,Smallcap 250
+HONAUT,Honeywell Automation India,Industrials,Capital Goods,Smallcap 250
+HSCL,Himadri Speciality Chemical,Basic Materials,Chemicals,Smallcap 250
+IDBI,IDBI Bank,Financial Services,Financial Services,Smallcap 250
+IEX,Indian Energy Exchange,Financial Services,Financial Services,Smallcap 250
+IFCI,IFCI,Financial Services,Financial Services,Smallcap 250
+IGIL,International Gemological Institute,Industrials,Services,Smallcap 250
+IGL,Indraprastha Gas,Energy,Oil Gas & Consumable Fuels,Smallcap 250
+IIFL,IIFL Finance,Financial Services,Financial Services,Smallcap 250
+IKS,Inventurus Knowledge Solutions,Technology,Information Technology,Smallcap 250
+INDIACEM,India Cements,Basic Materials,Construction Materials,Smallcap 250
+INDIAMART,Indiamart Intermesh,Consumer Cyclical,Consumer Services,Smallcap 250
+INOXINDIA,INOX India,Industrials,Capital Goods,Smallcap 250
+INOXWIND,Inox Wind,Industrials,Capital Goods,Smallcap 250
+INTELLECT,Intellect Design Arena,Technology,Information Technology,Smallcap 250
+IRB,IRB Infrastructure Developers,Industrials,Construction,Smallcap 250
+IRCON,IRCON International,Industrials,Construction,Smallcap 250
+ITI,ITI,Communication Services,Telecommunication,Smallcap 250
+J&KBANK,Jammu & Kashmir Bank,Financial Services,Financial Services,Smallcap 250
+JAINREC,Jain Resource Recycling,Basic Materials,Metals & Mining,Smallcap 250
+JBMA,JBM Auto,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+JINDALSAW,Jindal Saw,Industrials,Capital Goods,Smallcap 250
+JKTYRE,JK Tyre & Industries,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+JMFINANCIL,JM Financial,Financial Services,Financial Services,Smallcap 250
+JPPOWER,Jaiprakash Power Ventures,Utilities,Power,Smallcap 250
+JSWCEMENT,JSW Cement,Basic Materials,Construction Materials,Smallcap 250
+JUBLINGREA,Jubilant Ingrevia,Basic Materials,Chemicals,Smallcap 250
+JWL,Jupiter Wagons,Industrials,Capital Goods,Smallcap 250
+JYOTICNC,Jyoti CNC Automation,Industrials,Capital Goods,Smallcap 250
+KAJARIACER,Kajaria Ceramics,Consumer Cyclical,Consumer Durables,Smallcap 250
+KARURVYSYA,Karur Vysya Bank,Financial Services,Financial Services,Smallcap 250
+KAYNES,Kaynes Technology India,Industrials,Capital Goods,Smallcap 250
+KEC,Kec International,Industrials,Construction,Smallcap 250
+KFINTECH,Kfin Technologies,Financial Services,Financial Services,Smallcap 250
+KIMS,Krishna Institute of Medical Sciences,Healthcare,Healthcare,Smallcap 250
+KIRLOSBROS,Kirloskar Brothers,Industrials,Capital Goods,Smallcap 250
+KIRLOSENG,Kirloskar Oil Eng,Industrials,Capital Goods,Smallcap 250
+KPIL,Kalpataru Projects International,Industrials,Construction,Smallcap 250
+KPITTECH,KPIT Technologies,Technology,Information Technology,Smallcap 250
+KSB,KSB,Industrials,Capital Goods,Smallcap 250
+LALPATHLAB,Dr. Lal Path Labs,Healthcare,Healthcare,Smallcap 250
+LEMONTREE,Lemon Tree Hotels,Consumer Cyclical,Consumer Services,Smallcap 250
+LTFOODS,LT Foods,Consumer Defensive,Fast Moving Consumer Goods,Smallcap 250
+MANAPPURAM,Manappuram Finance,Financial Services,Financial Services,Smallcap 250
+MGL,Mahanagar Gas,Energy,Oil Gas & Consumable Fuels,Smallcap 250
+MINDACORP,Minda Corporation,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+MMTC,MMTC,Industrials,Services,Smallcap 250
+MRPL,Mangalore Refinery & Petrochemicals,Energy,Oil Gas & Consumable Fuels,Smallcap 250
+MSUMI,Motherson Sumi Wiring India,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+MTARTECH,MTAR Technologies,Industrials,Capital Goods,Smallcap 250
+NATCOPHARM,NATCO Pharma,Healthcare,Healthcare,Smallcap 250
+NAVA,Nava,Utilities,Power,Smallcap 250
+NAVINFLUOR,Navin Fluorine International,Basic Materials,Chemicals,Smallcap 250
+NBCC,NBCC (India),Industrials,Construction,Smallcap 250
+NCC,NCC,Industrials,Construction,Smallcap 250
+NETWEB,Netweb Technologies India,Technology,Information Technology,Smallcap 250
+NEULANDLAB,Neuland Laboratories,Healthcare,Healthcare,Smallcap 250
+NIACL,The New India Assurance Company,Financial Services,Financial Services,Smallcap 250
+NSLNISP,NMDC Steel,Basic Materials,Metals & Mining,Smallcap 250
+NUVAMA,Nuvama Wealth Management,Financial Services,Financial Services,Smallcap 250
+NUVOCO,Nuvoco Vistas Corporation,Basic Materials,Construction Materials,Smallcap 250
+OLAELEC,Ola Electric Mobility,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+OLECTRA,Olectra Greentech,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+ONESOURCE,Onesource Specialty Pharma,Healthcare,Healthcare,Smallcap 250
+PARADEEP,Paradeep Phosphates,Basic Materials,Chemicals,Smallcap 250
+PCBL,PCBL Chemical,Basic Materials,Chemicals,Smallcap 250
+PFOCUS,Prime Focus,Communication Services,Media Entertainment & Publication,Smallcap 250
+PGEL,PG Electroplast,Consumer Cyclical,Consumer Durables,Smallcap 250
+PINELABS,Pine Labs,Financial Services,Financial Services,Smallcap 250
+PNBHOUSING,PNB Housing Finance,Financial Services,Financial Services,Smallcap 250
+POLYMED,Poly Medicure,Healthcare,Healthcare,Smallcap 250
+POONAWALLA,Poonawalla Fincorp,Financial Services,Financial Services,Smallcap 250
+PPLPHARMA,Piramal Pharma,Healthcare,Healthcare,Smallcap 250
+PRIVISCL,Privi Speciality Chemicals,Basic Materials,Chemicals,Smallcap 250
+PTCIL,PTC Industries,Industrials,Capital Goods,Smallcap 250
+PVRINOX,PVR INOX,Communication Services,Media Entertainment & Publication,Smallcap 250
+PWL,Physicswallah,Consumer Cyclical,Consumer Services,Smallcap 250
+RAILTEL,Railtel Corporation Of India,Communication Services,Telecommunication,Smallcap 250
+RAINBOW,Rainbow Childrens Medicare,Healthcare,Healthcare,Smallcap 250
+RAMCOCEM,The Ramco Cements,Basic Materials,Construction Materials,Smallcap 250
+RBLBANK,RBL Bank,Financial Services,Financial Services,Smallcap 250
+REDINGTON,Redington,Industrials,Services,Smallcap 250
+RHIM,RHI MAGNESITA INDIA LTD.,Industrials,Capital Goods,Smallcap 250
+RITES,RITES,Industrials,Construction,Smallcap 250
+RKFORGE,Ramkrishna Forgings,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+RPOWER,Reliance Power,Utilities,Power,Smallcap 250
+RRKABEL,R R Kabel,Industrials,Capital Goods,Smallcap 250
+RUBICON,Rubicon Research,Healthcare,Healthcare,Smallcap 250
+SAGILITY,Sagility,Technology,Information Technology,Smallcap 250
+SAILIFE,Sai Life Sciences,Healthcare,Healthcare,Smallcap 250
+SAMMAANCAP,Sammaan Capital,Financial Services,Financial Services,Smallcap 250
+SANSERA,Sansera Engineering,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+SARDAEN,Sarda Energy and Minerals,Basic Materials,Metals & Mining,Smallcap 250
+SCHNEIDER,Schneider Electric Infrastructure,Industrials,Capital Goods,Smallcap 250
+SCI,Shipping Corporation of India,Industrials,Services,Smallcap 250
+SHRIPISTON,SPR Auto Technologies,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+SHYAMMETL,Shyam Metalics and Energy,Industrials,Capital Goods,Smallcap 250
+SIGNATURE,Signatureglobal (India),Real Estate,Realty,Smallcap 250
+SJVN,SJVN,Utilities,Power,Smallcap 250
+SOBHA,Sobha,Real Estate,Realty,Smallcap 250
+SONACOMS,Sona BLW Precision Forgings,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+STARHEALTH,Star Health and Allied Insurance Company,Financial Services,Financial Services,Smallcap 250
+STLTECH,Sterlite Technologies,Communication Services,Telecommunication,Smallcap 250
+SUMICHEM,Sumitomo Chemical India,Basic Materials,Chemicals,Smallcap 250
+SUNTV,Sun TV Network,Communication Services,Media Entertainment & Publication,Smallcap 250
+SWANCORP,Swan Corp,Basic Materials,Chemicals,Smallcap 250
+SYNGENE,Syngene International,Healthcare,Healthcare,Smallcap 250
+SYRMA,Syrma SGS Technology,Industrials,Capital Goods,Smallcap 250
+TARIL,Transformers And Rectifiers (India),Industrials,Capital Goods,Smallcap 250
+TATACHEM,Tata Chemicals,Basic Materials,Chemicals,Smallcap 250
+TATAELXSI,Tata Elxsi,Technology,Information Technology,Smallcap 250
+TATATECH,Tata Technologies,Technology,Information Technology,Smallcap 250
+TBOTEK,TBO Tek,Consumer Cyclical,Consumer Services,Smallcap 250
+TDPOWERSYS,TD Power Systems,Industrials,Capital Goods,Smallcap 250
+TECHNOE,Techno Electric & Engineering Company,Industrials,Construction,Smallcap 250
+TEGA,Tega Industries,Industrials,Capital Goods,Smallcap 250
+TEJASNET,Tejas Networks,Communication Services,Telecommunication,Smallcap 250
+TENNIND,Tenneco Clean Air India,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+THANGAMAYL,Thangamayil Jewellery,Consumer Cyclical,Consumer Durables,Smallcap 250
+TIMKEN,Timken India,Industrials,Capital Goods,Smallcap 250
+TITAGARH,Titagarh Rail Systems,Industrials,Capital Goods,Smallcap 250
+TRIDENT,Trident,Consumer Cyclical,Textiles,Smallcap 250
+TRITURBINE,Triveni Turbine,Industrials,Capital Goods,Smallcap 250
+TTML,Tata Teleservices (Maharashtra),Communication Services,Telecommunication,Smallcap 250
+UCOBANK,UCO Bank,Financial Services,Financial Services,Smallcap 250
+URBANCO,Urban Company,Consumer Cyclical,Consumer Services,Smallcap 250
+USHAMART,Usha Martin,Industrials,Capital Goods,Smallcap 250
+UTIAMC,UTI Asset Management Company,Financial Services,Financial Services,Smallcap 250
+VEDPOWER,Vedanta Power,Utilities,Power,Smallcap 250
+VIJAYA,Vijaya Diagnostic Centre,Healthcare,Healthcare,Smallcap 250
+VISL,Vedanta Iron and Steel,Basic Materials,Metals & Mining,Smallcap 250
+VOGL,Vedanta Oil and Gas,Energy,Oil Gas & Consumable Fuels,Smallcap 250
+VTL,Vardhman Textiles,Consumer Cyclical,Textiles,Smallcap 250
+WELCORP,Welspun Corp,Industrials,Capital Goods,Smallcap 250
+WELSPUNLIV,Welspun Living,Consumer Cyclical,Textiles,Smallcap 250
+WHIRLPOOL,Whirlpool of India,Consumer Cyclical,Consumer Durables,Smallcap 250
+WOCKPHARMA,Wockhardt,Healthcare,Healthcare,Smallcap 250
+ZEEL,Zee Entertainment Enterprises,Communication Services,Media Entertainment & Publication,Smallcap 250
+ZENSARTECH,Zensar Technolgies,Technology,Information Technology,Smallcap 250
+ZENTEC,Zen Technologies,Industrials,Capital Goods,Smallcap 250
+ZFCVINDIA,ZF Commercial Vehicle Control Systems India,Consumer Cyclical,Automobile and Auto Components,Smallcap 250
+ZYDUSWELL,Zydus Wellness,Consumer Defensive,Fast Moving Consumer Goods,Smallcap 250
