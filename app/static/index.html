@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StockPro - personal research</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<script>
+  // Pick the theme before the stylesheet paints so there is no flash: ?theme=light|dark > saved choice > OS preference.
+  (function () { var q = new URLSearchParams(location.search).get("theme"), t = q || localStorage.getItem("theme") ||
+    (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"); if (q) localStorage.setItem("theme", q); document.documentElement.dataset.theme = t; })();
+</script>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/vendor/chart.umd.js"></script>
+</head>
+<body>
+<header>
+  <div class="brand">Stock<b>Pro</b> <span class="muted">personal</span></div>
+  <div class="search">
+    <input id="q" placeholder="Search a stock (e.g. Reliance, TCS) or type any ticker + Enter" autocomplete="off">
+    <div id="suggest" class="suggest hidden"></div>
+  </div>
+  <span id="mode" class="badge"></span>
+  <button id="theme" title="Switch between light and dark mode">☀ Light</button>
+</header>
+<div id="banner" class="banner hidden"></div>
+<nav id="nav">
+  <a href="#/screener">Screener</a><a href="#/etfs">ETFs</a><a href="#/watchlist">Watchlist</a><a href="#/portfolio">Portfolio &amp; journal</a>
+  <a href="#/backtest">Backtest</a><a href="#/funds">Mutual funds</a><a href="#/learn">Learn</a>
+</nav>
+<main id="view"></main>
+<footer>Research tool for personal use. Signals are rule-based estimates from public data, not investment advice. You are responsible for your decisions.</footer>
+<script src="/static/app.js"></script>
+</body>
+</html>
