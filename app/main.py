@@ -1,6 +1,6 @@
 """StockPro: personal stock research app (FastAPI). Run: python run.py"""
 from __future__ import annotations
-import json, math, os, threading, time, uuid
+import json, math, os, threading, time, traceback, uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -485,7 +485,8 @@ def mf_compare(codes: str):
         cl = [int(c) for c in codes.split(",") if c.strip()][:5]
         return ok(mf.compare(cl))
     except Exception as e:
-        raise HTTPException(502, f"Could not load funds: {e}")
+        traceback.print_exc()          # the host's runtime log then shows the real cause, not just the 502 text
+        raise HTTPException(502, f"Could not load funds: {type(e).__name__}: {e}")
 
 
 @app.get("/api/mf/sip")

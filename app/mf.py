@@ -48,7 +48,10 @@ def nav_series(code: int) -> tuple[str, pd.Series]:
         r = requests.get(f"{API}/{code}", timeout=20)
         r.raise_for_status()
         j = r.json()
-        s = pd.Series({pd.to_datetime(x["date"], format="%d-%m-%Y"): float(x["nav"]) for x in j["data"]}).sort_index()
+        s = pd.Series({pd.to_datetime(x["date"], format="%d-%m-%Y"): float(x["nav"]) for x in j["data"]}, dtype="float64").sort_index()
+        s = s[s > 0]                  # AMFI history sometimes starts with 0.0 placeholders, which would make every ratio inf/NaN
+        if len(s) < 30:
+            raise ValueError(f"Fund {code} has no usable NAV history on mfapi.in")
         res = (j["meta"]["scheme_name"], s)
     data.cache_put(key, res)
     return res
