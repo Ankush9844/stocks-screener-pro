@@ -510,6 +510,9 @@ def chart_series(df: pd.DataFrame, days: int = 504) -> dict:
 # ------------------------------------------------------------------ backtests
 def metrics_from_equity(eq: pd.Series) -> dict:
     eq = eq.dropna()
+    eq = eq[eq > 0]                       # a zero or negative starting NAV (bad data) would make every ratio NaN/inf
+    if len(eq) < 2:
+        return {"total_return": None, "cagr": None, "volatility": None, "sharpe": None, "max_drawdown": None, "years": None}
     r = eq.pct_change().dropna()
     yrs = max((eq.index[-1] - eq.index[0]).days / 365.25, 1e-9)
     cagr = (eq.iloc[-1] / eq.iloc[0]) ** (1 / yrs) - 1

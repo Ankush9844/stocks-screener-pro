@@ -24,6 +24,21 @@ def _pick_home() -> Path:
 
 HOME = _pick_home()
 CACHE_DIR = HOME / "cache"
+_yf_ready: dict = {}
+
+
+def _yf():
+    """yfinance, with its timezone/cookie cache pointed at our writable folder (its default is ~/.cache, read-only on serverless hosts)."""
+    import yfinance as yf
+    if not _yf_ready.get("done"):
+        try:
+            d = CACHE_DIR / "yf"
+            d.mkdir(parents=True, exist_ok=True)
+            yf.set_tz_cache_location(str(d))
+        except Exception:
+            pass
+        _yf_ready["done"] = True
+    return yf
 EPHEMERAL = HOME == Path(tempfile.gettempdir()) / "stockpro"    # the UI warns that saved data may not persist
 BENCH = "^NSEI"  # Nifty 50 (price index)
 PRICE_TTL = 6 * 3600
@@ -135,7 +150,7 @@ def _retry(fn, tries: int = 4, waits=(5, 20, 45)):
 
 
 def _live_history(sym: str, years: int, period: str | None = None) -> pd.DataFrame:
-    import yfinance as yf
+    yf = _yf()
     df = _retry(lambda: yf.Ticker(sym).history(period=period or f"{years}y", auto_adjust=True))
     if df is None or df.empty:
         return pd.DataFrame()
@@ -156,7 +171,7 @@ def _num(x):
 
 
 def _live_info(sym: str, price: float | None) -> dict:
-    import yfinance as yf
+    yf = _yf()
     i = _retry(lambda: yf.Ticker(sym).info) or {}
     price = _num(i.get("currentPrice")) or _num(i.get("regularMarketPrice")) or price
     de = _num(i.get("debtToEquity"))
@@ -391,7 +406,7 @@ def _tabulate(frames) -> dict:
 
 
 def _live_financials(sym: str) -> dict:
-    import yfinance as yf
+    yf = _yf()
     t = yf.Ticker(sym)
 
     def grab(attr):
@@ -457,7 +472,7 @@ def get_financials(sym: str) -> dict:
 
 # ---------------------------------------------------------------- extras: earnings, dividends, holders, consensus, news
 def _live_extras(sym: str, info: dict) -> dict:
-    import yfinance as yf
+    yf = _yf()
     t = yf.Ticker(sym)
     price = info.get("price")
 

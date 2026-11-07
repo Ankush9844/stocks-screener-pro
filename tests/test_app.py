@@ -348,3 +348,11 @@ def test_serverless_screener_advances_per_request(monkeypatch):
             break
     assert not d["progress"]["running"] and len(d["rows"]) == 12 and d["progress"]["done"] == 12 and "changes" in d
     assert main._screen("sl-test", syms, ttl=1800)["rows"] == d["rows"]   # served from memory afterwards
+
+
+def test_equity_metrics_tolerate_bad_start():
+    idx = pd.bdate_range("2024-01-01", periods=300)
+    bad = pd.Series([0.0] + list(np.linspace(100, 130, 299)), index=idx)
+    m = analysis.metrics_from_equity(bad)
+    assert m["cagr"] is not None and math.isfinite(m["cagr"]) and m["total_return"] is not None
+    assert analysis.metrics_from_equity(pd.Series([0.0, 0.0], index=idx[:2]))["cagr"] is None
