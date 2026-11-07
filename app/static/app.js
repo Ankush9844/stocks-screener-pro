@@ -57,6 +57,11 @@ async function init() {
     const b = $("#banner"); b.classList.remove("hidden");
     b.textContent = "Demo mode: all prices and fundamentals are synthetic (" + s.reason + "). Do not make real decisions from them. Run the app on a computer with internet to get live data.";
   }
+  STATE.serverless = !!s.serverless;
+  if (s.ephemeral) {
+    const b = $("#banner"); b.classList.remove("hidden");
+    b.textContent = (b.textContent ? b.textContent + " " : "") + "This host has no permanent disk: the watchlist, portfolio journal and data cache are kept only while the server instance is warm and can vanish. Export anything you want to keep.";
+  }
   try { (await api("/api/watchlist")).forEach(r => STATE.wl.add(r.symbol)); } catch (e) {}
   window.addEventListener("hashchange", route); route();
 }
@@ -103,10 +108,10 @@ async function screen(path, refresh, what) {
     const p = d.progress, pc = p.total ? p.done / p.total * 100 : 0, eta = p.done > 3 ? Math.round(p.elapsed / p.done * (p.total - p.done)) : null;
     const done = [...d.rows].filter(r => r.score != null).sort((a, b) => b.score - a.score).slice(0, 12);
     view.innerHTML = `<div class="card"><h3>Analysing ${what}… ${p.done} of ${p.total}</h3><div class="bar" style="height:10px"><i style="width:${pc.toFixed(1)}%;background:var(--accent)"></i></div>
-      <p class="note">${p.elapsed}s elapsed${eta != null ? `, roughly ${eta}s to go` : ""}. ${STATE.mode === "live" ? "The first run downloads prices, ratios and statements for every stock; later runs come from the cache (prices 6h, fundamentals 24h)." : ""} You can use other tabs meanwhile: the job keeps running on the server.</p>
+      <p class="note">${p.elapsed}s elapsed${eta != null ? `, roughly ${eta}s to go` : ""}. ${STATE.mode === "live" ? "The first run downloads prices, ratios and statements for every stock; later runs come from the cache (prices 6h, fundamentals 24h)." : ""} ${STATE.serverless ? "On this host the job only advances while this page keeps polling, so leave it open." : "You can use other tabs meanwhile: the job keeps running on the server."}</p>
       ${p.error ? `<p class="neg">${esc(p.error)}</p>` : ""}
       ${done.length ? `<p class="note" style="margin-top:10px">Highest scores so far:</p>${done.map(r => `<a class="pill" href="#/stock/${encodeURIComponent(r.symbol)}">${esc(r.symbol.replace(".NS", ""))} · ${num(r.score, 0)}</a>`).join("")}` : ""}</div>`;
-    await new Promise(r => setTimeout(r, 2500));
+    await new Promise(r => setTimeout(r, STATE.serverless ? 300 : 2500));
     if (STATE.poll !== token) return null;
     d = await api(path);
   }

@@ -302,7 +302,8 @@ def test_retry_backs_off_on_rate_limit(monkeypatch):
         if len(calls) < 3:
             raise YFRateLimitError("Too Many Requests")
         return "ok"
-    assert data._retry(flaky) == "ok" and sleeps == [4, 12]
+    assert data._retry(flaky) == "ok" and len(sleeps) == 2 and data._cool["until"] > time.time()
+    data._cool["until"] = 0.0
     def other():
         raise ValueError("bad symbol")
     try:
@@ -318,3 +319,32 @@ def test_price_only_stock_gets_hold_not_buy():
     a = analysis.analyze_frame(df, {"name": "X", "fundamentals_ok": False, "price": float(df["Close"].iloc[-1])})
     assert a["overall"] is None and a["signals"]["long"]["signal"] == "HOLD" and a["signals"]["long"]["score"] is None
     assert "No fundamentals" in a["signals"]["long"]["reasons"][0][1]
+
+
+def test_home_falls_back_to_tmp_when_unwritable(monkeypatch):
+    monkeypatch.setenv("STOCKPRO_HOME", "/proc/stockpro-cannot-write-here")
+    monkeypatch.setattr(data.Path, "home", staticmethod(lambda: data.Path("/proc/no-home-either")))
+    h = data._pick_home()
+    assert str(h).startswith(data.tempfile.gettempdir()) and (h / "cache").is_dir()
+
+
+def test_invalidate_kinds_only_touch_requested_files():
+    data.get_history("ITC.NS"); data.get_info("ITC.NS"); data.get_extras("ITC.NS")
+    assert data.invalidate(["ITC.NS"], kinds=("hist",)) >= 1
+    assert data.cache_get("info_demo_ITC.NS", 999) is not None and data.cache_get("extras_demo_ITC.NS", 999) is not None
+    assert data.invalidate(["ITC.NS"]) >= 2 and data.cache_get("info_demo_ITC.NS", 999) is None
+
+
+def test_serverless_screener_advances_per_request(monkeypatch):
+    from app import main
+    monkeypatch.setattr(main, "SERVERLESS", True)
+    main._mem.pop("sl-test", None); main._jobs.pop("sl-test", None)
+    syms = [u["symbol"] for u in universe.load_universe()]
+    first = main._screen("sl-test", syms, ttl=1800)
+    assert "progress" in first
+    for _ in range(20):
+        d = main._screen("sl-test", syms, ttl=1800)
+        if not d["progress"]["running"]:
+            break
+    assert not d["progress"]["running"] and len(d["rows"]) == 12 and d["progress"]["done"] == 12 and "changes" in d
+    assert main._screen("sl-test", syms, ttl=1800)["rows"] == d["rows"]   # served from memory afterwards

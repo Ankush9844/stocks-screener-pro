@@ -10,7 +10,7 @@ python run.py --reload   # same, but picks up code changes without a restart
 ```
 Needs internet for live data (Yahoo Finance via `yfinance`, AMFI NAVs via mfapi.in). No API keys.
 No internet? `STOCKPRO_MODE=demo python run.py` uses clearly-labelled synthetic data.
-Docker: `docker build -t stockpro . && docker run -p 127.0.0.1:8000:8000 -v stockpro:/data stockpro`
+Docker and hosting: see Deploy below.
 
 ## Features
 - **Screener**: the **Nifty 500** (official NSE constituent list, bundled with index group: Nifty 50 / Next 50 / Midcap 150 / Smallcap 250). Runs as a background job with a progress bar (first live run a few minutes, then cached). Preset screens (quality compounders, below fair value, momentum leaders, dividend payers, beaten down but healthy), filter by index group, sector, NSE industry, signal, P/E, ROE, score, name; top ideas and weakest names; **signal changes** (every run is compared with the previous one, so HOLD → BUY flips are listed); CSV export; "Refresh data" refetches from the source
@@ -22,6 +22,12 @@ Docker: `docker build -t stockpro . && docker run -p 127.0.0.1:8000:8000 -v stoc
 - **Mutual funds**: compare any AMFI fund: CAGR, volatility, drawdown, Sharpe, tracking error, rolling returns, SIP/XIRR calculator
 - **Learn** tab: glossary and investing habits
 - **Light / dark mode**: toggle in the header (follows your OS setting until you choose; `?theme=light` or `?theme=dark` in the URL also works)
+
+## Deploy
+The app is a plain FastAPI service, so anything that runs Python works. Two things decide where it runs well: the screener for 500 stocks takes a couple of minutes of background work, and the watchlist, journal and cache are files on disk.
+- **A server you control (recommended)**: `docker build -t stockpro . && docker run -p 8000:8000 -v stockpro:/data stockpro`, or the same image on Render, Railway, Fly.io or a small VPS. Persistent disk, background jobs work, one instance serves the cache to everyone. Put it behind a login or VPN: the app has none.
+- **Vercel (serverless)**: works with zero config (`vercel.json` sets a 60 s function limit). Vercel sets `VERCEL=1`, which switches the app to *serverless mode*: the only writable folder is `/tmp`, so the data cache, watchlist and journal survive only while an instance is warm, and the screener advances a few seconds per poll request instead of running in the background (keep the tab open; the first full run takes a few minutes and will be redone after a cold start). Fine for trying it out, not for keeping a portfolio. `STOCKPRO_SERVERLESS=1` forces this mode elsewhere; `STOCKPRO_STEP_SECONDS` (default 8) is the work done per request.
+- **Yahoo throttling**: a full 500-stock fetch is roughly 2,000 requests. Yahoo rate-limits bursts; the app backs off and retries, and "Refresh data" only refetches prices (ratios and statements keep their 24 h cache). Don't refresh repeatedly, and expect a shared host's IP to be throttled sooner than your laptop's.
 
 ## Customise
 - Universe: the bundled `app/nifty500.csv` (`symbol,name,sector,industry,group`) comes from the NSE index constituent files at niftyindices.com. Index membership changes, so refresh it now and then, or create `~/.stockpro/universe.csv` with the same columns (`industry` and `group` optional, no `.NS`) to use your own list.

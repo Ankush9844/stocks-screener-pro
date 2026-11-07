@@ -3,14 +3,28 @@ LIVE mode  -> Yahoo Finance via yfinance (free, no key; NSE/BSE tickers like REL
 DEMO mode  -> deterministic synthetic data so the app can be tried offline. Never use it to invest.
 Mode is chosen once at start-up (set STOCKPRO_MODE=live|demo|auto)."""
 from __future__ import annotations
-import os, re, time, pickle, zlib, threading
+import os, re, time, pickle, zlib, threading, tempfile
 from pathlib import Path
 import numpy as np
 import pandas as pd
 
-HOME = Path(os.environ.get("STOCKPRO_HOME", Path.home() / ".stockpro"))
+def _pick_home() -> Path:
+    """First writable of: $STOCKPRO_HOME, ~/.stockpro, <tmp>/stockpro. Serverless hosts (Vercel, Lambda) only allow writes under /tmp,
+    where the cache and watchlist survive only while the instance is warm."""
+    env = os.environ.get("STOCKPRO_HOME")
+    cands = ([Path(env)] if env else []) + [Path.home() / ".stockpro", Path(tempfile.gettempdir()) / "stockpro"]
+    for c in cands:
+        try:
+            (c / "cache").mkdir(parents=True, exist_ok=True)
+            return c
+        except OSError:
+            continue
+    return cands[-1]
+
+
+HOME = _pick_home()
 CACHE_DIR = HOME / "cache"
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
+EPHEMERAL = HOME == Path(tempfile.gettempdir()) / "stockpro"    # the UI warns that saved data may not persist
 BENCH = "^NSEI"  # Nifty 50 (price index)
 PRICE_TTL = 6 * 3600
 INFO_TTL = 24 * 3600
@@ -53,12 +67,16 @@ def cache_put(key: str, val):
         pass
 
 
-def invalidate(symbols) -> int:
-    """Delete cached prices, fundamentals and statements for these symbols so the next call hits the source."""
+_KINDS = {"hist": "hist_*_{s}_*.pkl", "info": "info_*_{s}.pkl", "fin": "fin_*_{s}.pkl", "extras": "extras_*_{s}.pkl"}
+
+
+def invalidate(symbols, kinds=("hist", "info", "fin", "extras")) -> int:
+    """Delete cached data for these symbols so the next call hits the source. kinds: prices (hist), ratios (info),
+    statements (fin), earnings/dividends/news (extras)."""
     n = 0
     for s in symbols:
         safe = re.sub(r"[^A-Za-z0-9_.-]", "_", s)
-        for pat in (f"hist_*_{safe}_*.pkl", f"info_*_{safe}.pkl", f"fin_*_{safe}.pkl", f"extras_*_{safe}.pkl"):
+        for pat in (_KINDS[k].format(s=safe) for k in kinds):
             for p in CACHE_DIR.glob(pat):
                 try:
                     p.unlink()
@@ -99,15 +117,21 @@ def rate_limited(e: BaseException) -> bool:
     return "RateLimit" in type(e).__name__ or "Too Many Requests" in str(e)
 
 
-def _retry(fn, tries: int = 3, waits=(4, 12)):
+_cool = {"until": 0.0}   # shared cooldown: when one thread is throttled, every thread pauses, or the ban just gets longer
+
+
+def _retry(fn, tries: int = 4, waits=(5, 20, 45)):
     """Yahoo throttles bursts (a 500-stock screener run is one): back off and retry instead of failing the symbol."""
     for k in range(tries):
+        wait = _cool["until"] - time.time()
+        if wait > 0:
+            time.sleep(min(wait, 60))
         try:
             return fn()
         except Exception as e:
             if not rate_limited(e) or k == tries - 1:
                 raise
-            time.sleep(waits[min(k, len(waits) - 1)])
+            _cool["until"] = max(_cool["until"], time.time() + waits[min(k, len(waits) - 1)])
 
 
 def _live_history(sym: str, years: int, period: str | None = None) -> pd.DataFrame:

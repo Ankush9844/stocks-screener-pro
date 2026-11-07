@@ -1,6 +1,6 @@
 """StockPro: personal stock research app (FastAPI). Run: python run.py"""
 from __future__ import annotations
-import json, math, threading, time, uuid
+import json, math, os, threading, time, uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -20,6 +20,10 @@ _jobs: dict = {}            # background screener runs: name -> {"running", "don
 _jobs_lock = threading.Lock()
 HORIZONS = ("long", "medium", "short")
 WORKERS = 6
+# Serverless hosts (Vercel sets VERCEL=1) freeze the process after each response, so background threads cannot be relied on.
+# There the screener advances a few seconds per poll request instead; the client keeps polling until it is done.
+SERVERLESS = bool(os.environ.get("VERCEL") or os.environ.get("STOCKPRO_SERVERLESS"))
+STEP_SECONDS = float(os.environ.get("STOCKPRO_STEP_SECONDS", "8"))
 
 
 def clean(o):
@@ -107,7 +111,8 @@ def row(sym: str, a: dict) -> dict:
 
 
 # ------------------------------------------------------------------ background screening
-def _run_screen(name: str, syms: list[str], job: dict, extra):
+def _work(job: dict, batch: list[str], workers: int = WORKERS):
+    """Analyse `batch` into job["rows"] / job["failed"] (blocking)."""
     def one(sym):
         try:
             r = row(sym, analyze(sym))
@@ -116,47 +121,90 @@ def _run_screen(name: str, syms: list[str], job: dict, extra):
         with _jobs_lock:
             (job["failed"] if "error" in r else job["rows"]).append(r["symbol"] if "error" in r else r)
             job["done"] += 1
+    with ThreadPoolExecutor(workers) as ex:
+        list(ex.map(one, batch))
+
+
+def _finish(name: str, job: dict, syms: list[str], extra):
+    order = {s: k for k, s in enumerate(syms)}
+    rows = sorted(job["rows"], key=lambda r: order.get(r["symbol"], 1e9))
+    res = {"rows": rows, "failed": list(job["failed"]), "changes": _record_signals(rows), "mode": data.mode(),
+           "as_of": time.strftime("%Y-%m-%d %H:%M"), "seconds": round(time.time() - job["started"])}
+    if extra:
+        res.update(extra(rows))
+    _mem[name] = (time.time(), res)
+    job["running"] = False
+
+
+def _retry_failed(job: dict) -> bool:
+    """Queue the failed symbols for one more pass (usually Yahoo throttling near the end of a big run). False if already done."""
+    if not job["failed"] or job.get("retried") or data.mode() != "live":
+        return False
+    job["retried"], job["pending"], job["failed"] = True, list(job["failed"]), []
+    job["done"] -= len(job["pending"])
+    return True
+
+
+def _run_screen(name: str, syms: list[str], job: dict, extra):
+    """Thread mode: analyse everything, retry the failures once after a pause, then publish."""
     try:
-        with ThreadPoolExecutor(WORKERS) as ex:
-            list(ex.map(one, syms))
-        if job["failed"] and data.mode() == "live":   # usually Yahoo throttling near the end of a big run: pause, then retry those once
+        _work(job, syms)
+        if _retry_failed(job):
             time.sleep(10)
-            retry, job["failed"] = list(job["failed"]), []
-            job["done"] -= len(retry)
-            with ThreadPoolExecutor(max(2, WORKERS // 2)) as ex:
-                list(ex.map(one, retry))
-        order = {s: k for k, s in enumerate(syms)}
-        rows = sorted(job["rows"], key=lambda r: order.get(r["symbol"], 1e9))
-        res = {"rows": rows, "failed": list(job["failed"]), "changes": _record_signals(rows), "mode": data.mode(),
-               "as_of": time.strftime("%Y-%m-%d %H:%M"), "seconds": round(time.time() - job["started"])}
-        if extra:
-            res.update(extra(rows))
-        _mem[name] = (time.time(), res)
+            pending, job["pending"] = job["pending"], []
+            _work(job, pending, max(2, WORKERS // 2))
+        _finish(name, job, syms, extra)
     except Exception as e:
         job["error"] = f"{type(e).__name__}: {e}"
     finally:
         job["running"] = False
 
 
+def _step(name: str, job: dict, syms: list[str], extra, budget: float):
+    """Serverless mode: do up to `budget` seconds of the job inside this request."""
+    t0 = time.time()
+    try:
+        while time.time() - t0 < budget:
+            with _jobs_lock:
+                batch, job["pending"] = job["pending"][:WORKERS], job["pending"][WORKERS:]
+            if not batch:
+                if _retry_failed(job):
+                    continue
+                _finish(name, job, syms, extra)
+                return
+            _work(job, batch)
+    except Exception as e:
+        job["error"], job["running"] = f"{type(e).__name__}: {e}", False
+
+
 def _screen(name: str, syms: list[str], refresh: bool = False, extra=None, ttl: int = 1800) -> dict:
-    """Screener results for `syms`. The first call starts a background job and returns straight away with the rows done so far
-    plus a `progress` block; the client polls until `progress.running` is false. Finished results are kept for `ttl` seconds."""
+    """Screener results for `syms`. The first call starts a job and returns straight away with the rows done so far plus a
+    `progress` block; the client polls until `progress.running` is false. Finished results are kept for `ttl` seconds.
+    Refresh drops cached prices (ratios and statements keep their 24h cache: refetching those for 500 stocks is what gets
+    a client throttled by Yahoo)."""
     with _jobs_lock:
         job = _jobs.get(name)
         running = bool(job and job["running"])
-    if refresh and not running:   # drop the in-memory analyses and the on-disk price/fundamentals cache, then refetch
+    if refresh and not running:
         _mem.pop(name, None)
         for k in [k for k in _mem if k.startswith("peers:")] + [f"an:{s}" for s in syms]:
             _mem.pop(k, None)
-        data.invalidate(syms + [data.BENCH])
+        data.invalidate(syms + [data.BENCH], kinds=("hist",))
     hit = _mem.get(name)
     if hit and time.time() - hit[0] < ttl:
         return {**hit[1], "progress": {"done": len(syms), "total": len(syms), "running": False}}
     with _jobs_lock:
         job = _jobs.get(name)
         if not job or not job["running"]:
-            job = _jobs[name] = {"running": True, "done": 0, "total": len(syms), "rows": [], "failed": [], "started": time.time()}
-            threading.Thread(target=_run_screen, args=(name, syms, job, extra), daemon=True).start()
+            job = _jobs[name] = {"running": True, "done": 0, "total": len(syms), "rows": [], "failed": [], "pending": list(syms), "started": time.time()}
+            if not SERVERLESS:
+                threading.Thread(target=_run_screen, args=(name, syms, job, extra), daemon=True).start()
+    if SERVERLESS and job["running"]:
+        _step(name, job, syms, extra, STEP_SECONDS)
+        hit = _mem.get(name)
+        if hit and not job["running"] and not job.get("error"):
+            return {**hit[1], "progress": {"done": len(syms), "total": len(syms), "running": False}}
+    with _jobs_lock:
         snapshot = {"rows": list(job["rows"]), "failed": list(job["failed"]),
                     "progress": {"done": job["done"], "total": job["total"], "running": job["running"],
                                  "elapsed": round(time.time() - job["started"]), "error": job.get("error")}}
@@ -167,7 +215,8 @@ def _screen(name: str, syms: list[str], refresh: bool = False, extra=None, ttl: 
 @app.get("/api/status")
 def status():
     return ok({"mode": data.mode(), "reason": data.mode_reason(), "universe_size": len(universe.load_universe()),
-               "groups": universe.groups(), "etf_count": len(universe.load_etfs()), "home": str(data.HOME)})
+               "groups": universe.groups(), "etf_count": len(universe.load_etfs()), "home": str(data.HOME),
+               "serverless": SERVERLESS, "ephemeral": data.EPHEMERAL})
 
 
 @app.get("/api/search")
@@ -261,7 +310,7 @@ def peers(symbol: str):
     def run():
         pool = universe.load_etfs() if etf else universe.load_universe()
         key = "category" if etf else "sector"
-        cands = [u["symbol"] for u in pool if u[key] == sector and u["symbol"] != sym][:30]
+        cands = [u["symbol"] for u in pool if u[key] == sector and u["symbol"] != sym][:10 if SERVERLESS else 30]
         def one(s):
             try:
                 return row(s, analyze(s))
