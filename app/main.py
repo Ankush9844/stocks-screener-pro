@@ -6,13 +6,36 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from fastapi import Body, FastAPI, HTTPException, Query
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import analysis, data, mf, universe
+from . import analysis, data, mf, supa, universe
 
-app = FastAPI(title="StockPro (personal)")
+ACCESS_COOKIE, REFRESH_COOKIE = "sp_at", "sp_rt"
+
+
+def gate(request: Request):
+    """With Supabase configured, every /api route except status and the login endpoints needs a signed-in user;
+    handlers read it from request.state.user. Without Supabase the app is open and user is None (single-user, files on disk)."""
+    request.state.user = None
+    path = request.url.path
+    if not supa.enabled() or not path.startswith("/api/") or path == "/api/status" or path.startswith("/api/auth/"):
+        return
+    user = supa.user_for(request.cookies.get(ACCESS_COOKIE))
+    if not user:
+        raise HTTPException(401, "Sign in to continue.")
+    request.state.user = user
+
+
+app = FastAPI(title="StockPro (personal)", dependencies=[Depends(gate)])
+
+
+@app.exception_handler(supa.SupaError)
+def _supa_error(request: Request, e: supa.SupaError):
+    return JSONResponse({"detail": e.message}, status_code=e.status)
+
+
 STATIC = Path(__file__).parent / "static"
 _store_lock = threading.Lock()
 _mem: dict = {}
@@ -216,7 +239,7 @@ def _screen(name: str, syms: list[str], refresh: bool = False, extra=None, ttl: 
 def status():
     return ok({"mode": data.mode(), "reason": data.mode_reason(), "universe_size": len(universe.load_universe()),
                "groups": universe.groups(), "etf_count": len(universe.load_etfs()), "home": str(data.HOME),
-               "serverless": SERVERLESS, "ephemeral": data.EPHEMERAL})
+               "serverless": SERVERLESS, "ephemeral": data.EPHEMERAL, "auth": supa.enabled()})
 
 
 @app.get("/api/search")
@@ -232,7 +255,7 @@ def _record_signals(rows: list[dict]) -> list[dict]:
     """Remember every stock's signals after each screener run and return the changes seen in the last 30 days (newest first).
     This is how you notice a stock flipping HOLD -> BUY (or BUY -> SELL) without re-reading the whole table."""
     name = f"signal_history_{data.mode()}"
-    hist = _load(name, {"last": {}, "changes": []})
+    hist = _state_load(name, {"last": {}, "changes": []})
     today, last, new = time.strftime("%Y-%m-%d"), hist.get("last", {}), []
     for r in rows:
         cur = {h: r["signals"][h]["signal"] for h in HORIZONS}
@@ -243,13 +266,13 @@ def _record_signals(rows: list[dict]) -> list[dict]:
                     new.append({"date": today, "symbol": r["symbol"], "name": r["name"], "horizon": h, "from": prev[h], "to": cur[h]})
         last[r["symbol"]] = {**cur, "date": today}
     hist["last"], hist["changes"] = last, (new + hist.get("changes", []))[:500]
-    _save(name, hist)
+    _state_save(name, hist)
     cutoff = time.strftime("%Y-%m-%d", time.localtime(time.time() - 30 * 86400))
     return [c for c in hist["changes"] if c["date"] >= cutoff]
 
 
 def _symbol_changes(sym: str) -> list[dict]:
-    hist = _load(f"signal_history_{data.mode()}", {})
+    hist = _state_load(f"signal_history_{data.mode()}", {}, max_age=300)
     return [c for c in hist.get("changes", []) if c["symbol"] == sym][:10]
 
 
@@ -360,7 +383,115 @@ def backtest_momentum(top_n: int = Query(10, ge=3, le=30), lookback_months: int 
     return ok(cached(f"bt:{group}:{top_n}:{lookback_months}", 3600, run))
 
 
+# ------------------------------------------------------------------ login (Supabase Auth; the session lives in HttpOnly cookies)
+def _origin(request: Request) -> str:
+    """This deployment's public address: where Supabase's confirmation and password-reset emails should link back to
+    (Supabase only honours it if it is listed under Authentication > URL Configuration)."""
+    h = request.headers
+    proto = (h.get("x-forwarded-proto") or request.url.scheme).split(",")[0].strip()
+    return f"{proto}://{h.get('x-forwarded-host') or h.get('host') or request.url.netloc}"
+
+
+def _public(u: dict) -> dict:
+    return {"id": u.get("id"), "email": u.get("email")}
+
+
+def _with_session(request: Request, resp: JSONResponse, s: dict) -> JSONResponse:
+    secure = _origin(request).startswith("https://")
+    ttl = max(int(s.get("expires_in") or 3600) - 60, 30)      # drop the cookie a little before the token itself expires
+    resp.set_cookie(ACCESS_COOKIE, s["access_token"], max_age=ttl, httponly=True, samesite="lax", secure=secure, path="/")
+    if s.get("refresh_token"):
+        resp.set_cookie(REFRESH_COOKIE, s["refresh_token"], max_age=60 * 86400, httponly=True, samesite="lax", secure=secure, path="/api/auth")
+    return resp
+
+
+def _without_session(resp: JSONResponse) -> JSONResponse:
+    resp.delete_cookie(ACCESS_COOKIE, path="/")
+    resp.delete_cookie(REFRESH_COOKIE, path="/api/auth")
+    return resp
+
+
+def _credentials(body: dict, password: bool = True) -> tuple[str, str]:
+    email, pw = str(body.get("email") or "").strip(), str(body.get("password") or "")
+    if not supa.enabled():
+        raise HTTPException(404, "Login is not configured on this server.")
+    if "@" not in email or (password and not pw):
+        raise HTTPException(400, "Enter your email and password." if password else "Enter your email.")
+    return email, pw
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request):
+    user = supa.user_for(request.cookies.get(ACCESS_COOKIE)) if supa.enabled() else None
+    if not user:
+        raise HTTPException(401, "Not signed in.")
+    return ok({"user": _public(user)})
+
+
+@app.post("/api/auth/login")
+def auth_login(request: Request, body: dict = Body(...)):
+    s = supa.sign_in(*_credentials(body))
+    return _with_session(request, ok({"user": _public(s.get("user") or {})}), s)
+
+
+@app.post("/api/auth/signup")
+def auth_signup(request: Request, body: dict = Body(...)):
+    s = supa.sign_up(*_credentials(body), redirect_to=_origin(request))
+    if not s.get("access_token"):       # the project asks new users to confirm their email first
+        return ok({"confirm": True})
+    return _with_session(request, ok({"user": _public(s.get("user") or {})}), s)
+
+
+@app.post("/api/auth/refresh")
+def auth_refresh(request: Request):
+    rt = request.cookies.get(REFRESH_COOKIE)
+    try:
+        if not rt or not supa.enabled():
+            raise supa.SupaError(401, "Not signed in.")
+        s = supa.refresh(rt)
+    except supa.SupaError as e:
+        if e.status >= 500:
+            raise                       # Supabase unreachable: keep the cookies, the next attempt may work
+        return _without_session(JSONResponse({"detail": "Your session has ended. Sign in again."}, status_code=401))
+    return _with_session(request, ok({"user": _public(s.get("user") or {})}), s)
+
+
+@app.post("/api/auth/session")
+def auth_session(request: Request, body: dict = Body(...)):
+    """Adopt the session Supabase puts in the address after an emailed link (confirm sign-up, reset password) is opened."""
+    at = str(body.get("access_token") or "")
+    user = supa.user_for(at) if supa.enabled() else None
+    if not user:
+        raise HTTPException(401, "That email link is invalid or has expired.")
+    s = {"access_token": at, "refresh_token": str(body.get("refresh_token") or ""), "expires_in": supa.token_expiry(at) - time.time()}
+    return _with_session(request, ok({"user": _public(user)}), s)
+
+
+@app.post("/api/auth/recover")
+def auth_recover(request: Request, body: dict = Body(...)):
+    supa.recover(_credentials(body, password=False)[0], redirect_to=_origin(request))
+    return ok({"sent": True})
+
+
+@app.post("/api/auth/password")
+def auth_password(request: Request, body: dict = Body(...)):
+    user = supa.user_for(request.cookies.get(ACCESS_COOKIE)) if supa.enabled() else None
+    if not user:
+        raise HTTPException(401, "Sign in to continue.")
+    supa.update_password(user["token"], str(body.get("password") or ""))
+    return ok({"updated": True})
+
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request):
+    at = request.cookies.get(ACCESS_COOKIE)
+    if at and supa.enabled():
+        supa.sign_out(at)
+    return _without_session(ok({"signed_out": True}))
+
+
 # ------------------------------------------------------------------ persistence (watchlist, portfolio)
+# Signed-in users (Supabase configured): rows in Supabase, private to each user. Otherwise: JSON files in data.HOME.
 def _load(name, default):
     p = data.HOME / f"{name}.json"
     if p.exists():
@@ -376,20 +507,55 @@ def _save(name, obj):
         (data.HOME / f"{name}.json").write_text(json.dumps(obj, indent=2))
 
 
+def _state_load(name, default, max_age: float = 0):
+    """App-wide state (signal history): Supabase when a service-role key is set, else a JSON file. `max_age` > 0 accepts a
+    copy this instance read that recently, which saves a round trip on every stock page."""
+    if not supa.shared():
+        return _load(name, default)
+    hit = _mem.get("state:" + name)
+    if hit and time.time() - hit[0] < max_age:
+        return hit[1]
+    try:
+        val = supa.state_get(name, default)
+    except supa.SupaError:
+        traceback.print_exc()           # a screener run must not fail because the history could not be read
+        return _load(name, default)
+    _mem["state:" + name] = (time.time(), val)
+    return val
+
+
+def _state_save(name, obj):
+    if supa.shared():
+        try:
+            supa.state_put(name, obj)
+            _mem["state:" + name] = (time.time(), obj)
+            return
+        except supa.SupaError:
+            traceback.print_exc()
+    _save(name, obj)
+
+
 @app.get("/api/watchlist")
-def get_watchlist():
+def get_watchlist(request: Request):
+    user = request.state.user
+    syms = supa.watchlist(user) if user else _load("watchlist", [])
+
     def one(s):
         try:
             return row(s, analyze(s))
         except Exception:
             return {"symbol": s, "name": s, "error": True}
     with ThreadPoolExecutor(WORKERS) as ex:
-        return ok(list(ex.map(one, _load("watchlist", []))))
+        return ok(list(ex.map(one, syms)))
 
 
 @app.post("/api/watchlist/{symbol}")
-def add_watch(symbol: str):
-    sym, wl = data.normalize(symbol), _load("watchlist", [])
+def add_watch(symbol: str, request: Request):
+    sym, user = data.normalize(symbol), request.state.user
+    if user:
+        supa.watch_add(user, sym)
+        return ok(supa.watchlist(user))
+    wl = _load("watchlist", [])
     if sym not in wl:
         wl.append(sym)
         _save("watchlist", wl)
@@ -397,16 +563,20 @@ def add_watch(symbol: str):
 
 
 @app.delete("/api/watchlist/{symbol}")
-def del_watch(symbol: str):
-    sym = data.normalize(symbol)
+def del_watch(symbol: str, request: Request):
+    sym, user = data.normalize(symbol), request.state.user
+    if user:
+        supa.watch_del(user, sym)
+        return ok(supa.watchlist(user))
     wl = [s for s in _load("watchlist", []) if s != sym]
     _save("watchlist", wl)
     return ok(wl)
 
 
 @app.get("/api/portfolio")
-def get_portfolio():
-    items = _load("portfolio", [])
+def get_portfolio(request: Request):
+    user = request.state.user
+    items = supa.holdings(user) if user else _load("portfolio", [])
     bench = bench_df()["Close"]
     bnow = float(bench.iloc[-1])
     rows, tot_inv, tot_val, tot_bench = [], 0.0, 0.0, 0.0
@@ -451,7 +621,7 @@ def get_portfolio():
 
 
 @app.post("/api/portfolio")
-def add_holding(body: dict = Body(...)):
+def add_holding(request: Request, body: dict = Body(...)):
     try:
         h = {"id": uuid.uuid4().hex[:8], "symbol": data.normalize(body["symbol"]), "qty": float(body["qty"]),
              "price": float(body["price"]), "date": str(body["date"])[:10], "note": str(body.get("note", ""))[:500]}
@@ -459,13 +629,23 @@ def add_holding(body: dict = Body(...)):
         assert h["qty"] > 0 and h["price"] > 0
     except Exception:
         raise HTTPException(400, "Need symbol, qty > 0, price > 0 and a valid past date (YYYY-MM-DD).")
+    user = request.state.user
+    if user:
+        return ok(supa.holding_add(user, h))        # Supabase assigns the id
     items = _load("portfolio", []) + [h]
     _save("portfolio", items)
     return ok(h)
 
 
 @app.delete("/api/portfolio/{hid}")
-def del_holding(hid: str):
+def del_holding(hid: str, request: Request):
+    user = request.state.user
+    if user:
+        try:
+            supa.holding_del(user, str(uuid.UUID(hid)))
+        except ValueError:
+            raise HTTPException(404, "No such holding.")
+        return ok({"deleted": hid})
     _save("portfolio", [h for h in _load("portfolio", []) if h["id"] != hid])
     return ok({"deleted": hid})
 

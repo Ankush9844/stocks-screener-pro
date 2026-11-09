@@ -16,13 +16,26 @@ const sigBadge = s => `<span class="sig ${s}">${s}</span>`;
 const scoreColor = s => s == null ? "var(--muted)" : s >= 65 ? "var(--green)" : s >= 45 ? "var(--amber)" : "var(--red)";
 const bar = s => `<div class="bar"><i style="width:${s ?? 0}%;background:${scoreColor(s)}"></i></div>`;
 
-async function api(path, opts) {
+// Signed-in sessions (Supabase) live in HttpOnly cookies. The access token lasts about an hour; when a request comes back
+// 401 the session is renewed once and the request repeated. If that fails too, the login screen takes over.
+let refreshing = null;
+function refreshSession() {   // single flight: a page fires several requests at once and they must share one renewal
+  return refreshing ||= fetch("/api/auth/refresh", { method: "POST" }).then(r => r.ok, () => false).finally(() => { refreshing = null; });
+}
+const post = body => ({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+async function api(path, opts, retried) {
   const r = await fetch(path, opts);
+  if (r.status === 401 && STATE.auth && !path.startsWith("/api/auth/")) {
+    if (!retried && await refreshSession()) return api(path, opts, true);
+    if (STATE.user) loginView("Your session has ended. Sign in again.");
+    throw Object.assign(new Error("Sign in to continue."), { auth: true });
+  }
   if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch (e) {} throw new Error(m); }
   return r.json();
 }
 const spin = msg => view.innerHTML = `<div class="spin">${esc(msg || "Loading…")}</div>`;
-const fail = e => view.innerHTML = `<div class="card"><h3>Something went wrong</h3><p class="neg">${esc(e.message)}</p></div>`;
+const fail = e => { if (e.auth) return;   // the login screen is already showing
+  view.innerHTML = `<div class="card"><h3>Something went wrong</h3><p class="neg">${esc(e.message)}</p></div>`; };
 function killCharts() { charts.forEach(c => c.destroy()); charts = []; }
 function chart(el, cfg) { const c = new Chart(el, cfg); charts.push(c); return c; }
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();   // current theme colour
@@ -57,15 +70,86 @@ async function init() {
     const b = $("#banner"); b.classList.remove("hidden");
     b.textContent = "Demo mode: all prices and fundamentals are synthetic (" + s.reason + "). Do not make real decisions from them. Run the app on a computer with internet to get live data.";
   }
-  STATE.serverless = !!s.serverless;
-  if (s.ephemeral) {
+  STATE.serverless = !!s.serverless; STATE.auth = !!s.auth;
+  if (s.ephemeral && !s.auth) {   // with accounts on, the watchlist and journal are in Supabase and survive
     const b = $("#banner"); b.classList.remove("hidden");
     b.textContent = (b.textContent ? b.textContent + " " : "") + "This host has no permanent disk: the watchlist, portfolio journal and data cache are kept only while the server instance is warm and can vanish. Export anything you want to keep.";
   }
-  try { (await api("/api/watchlist")).forEach(r => STATE.wl.add(r.symbol)); } catch (e) {}
-  window.addEventListener("hashchange", route); route();
+  window.addEventListener("hashchange", route);
+  if (STATE.auth) {
+    const link = await fromEmailLink();
+    STATE.user = await currentUser();
+    if (!STATE.user) return loginView(link?.error);
+    if (link?.type === "recovery") return passwordView();
+  }
+  enter();
 }
+// Load what belongs to whoever is using the app (the signed-in user, or everyone when accounts are off) and show the page.
+async function enter() {
+  shell();
+  STATE.wl = new Set();
+  try { (await api("/api/watchlist")).forEach(r => STATE.wl.add(r.symbol)); } catch (e) { if (e.auth) return; }
+  route();
+}
+function shell() {
+  const anon = STATE.auth && !STATE.user;
+  document.body.classList.toggle("anon", anon);
+  $("#who").textContent = STATE.user?.email || ""; $("#who").title = STATE.user?.email || "";
+  $("#who").classList.toggle("hidden", !STATE.user); $("#logout").classList.toggle("hidden", !STATE.user);
+}
+async function currentUser() {
+  try {
+    let r = await fetch("/api/auth/me");
+    if (r.status === 401 && await refreshSession()) r = await fetch("/api/auth/me");
+    return r.ok ? (await r.json()).user : null;
+  } catch (e) { return null; }
+}
+// Supabase's emailed links (confirm sign-up, reset password) come back with the session in the address after "#".
+// Hand it to the server, which keeps it in cookies, and take it out of the address bar straight away.
+async function fromEmailLink() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (!h.get("access_token") && !h.get("error_description")) return null;
+  history.replaceState(null, "", location.pathname + location.search);
+  if (h.get("error_description")) return { error: h.get("error_description") };
+  const r = await fetch("/api/auth/session", post({ access_token: h.get("access_token"), refresh_token: h.get("refresh_token") })).catch(() => null);
+  return r?.ok ? { type: h.get("type") } : { error: "That email link is invalid or has expired." };
+}
+function loginView(msg, mode = "in", email = "") {
+  STATE.user = null; STATE.poll = null; killCharts(); view.onclick = null; shell();
+  const [title, action, sub] = { in: ["Sign in", "Sign in", "Your watchlist and portfolio journal are saved to your account."],
+    up: ["Create your account", "Create account", "Your watchlist and portfolio journal will be saved to this account."],
+    reset: ["Reset your password", "Email me a reset link", "Enter your email and we'll send a link to choose a new password."] }[mode];
+  view.innerHTML = `<div class="card auth"><h2>${title}</h2><p class="sub">${sub}</p>
+    ${msg ? `<div class="warn">${esc(msg)}</div>` : ""}
+    <form id="af"><label>Email<input name="email" type="email" required autocomplete="email" value="${esc(email)}"></label>
+      ${mode === "reset" ? "" : `<label>Password<input name="password" type="password" required minlength="6" autocomplete="${mode === "up" ? "new-password" : "current-password"}"></label>`}
+      <button class="primary">${action}</button><div id="aerr" class="neg"></div></form>
+    <div class="links">${mode === "in" ? `<button class="link" data-m="up">Create an account</button><button class="link" data-m="reset">Forgot password?</button>` : `<button class="link" data-m="in">Back to sign in</button>`}</div></div>`;
+  const form = $("#af");
+  view.querySelectorAll("[data-m]").forEach(b => b.onclick = () => loginView("", b.dataset.m, form.email.value));
+  form.onsubmit = async e => { e.preventDefault(); const btn = form.querySelector("button"); btn.disabled = true; $("#aerr").textContent = "";
+    try {
+      const r = await api("/api/auth/" + { in: "login", up: "signup", reset: "recover" }[mode], post(Object.fromEntries(new FormData(form))));
+      if (mode === "reset") return loginView("If that email has an account, a reset link is on its way. Open it on this device.", "in", form.email.value);
+      if (r.confirm) return loginView("Almost there: open the confirmation link we just emailed you, then sign in.", "in", form.email.value);
+      STATE.user = r.user; enter();
+    } catch (er) { $("#aerr").textContent = er.message; btn.disabled = false; } };
+  form[email && mode !== "reset" ? "password" : "email"].focus();
+}
+function passwordView() {
+  shell();
+  view.innerHTML = `<div class="card auth"><h2>Choose a new password</h2><p class="sub">Signed in as ${esc(STATE.user.email)}.</p>
+    <form id="af"><label>New password<input name="password" type="password" required minlength="6" autocomplete="new-password"></label>
+      <button class="primary">Save password</button><div id="aerr" class="neg"></div></form>
+    <div class="links"><button class="link" id="skip">Not now</button></div></div>`;
+  $("#skip").onclick = enter;
+  $("#af").onsubmit = async e => { e.preventDefault(); const btn = e.target.querySelector("button"); btn.disabled = true; $("#aerr").textContent = "";
+    try { await api("/api/auth/password", post({ password: e.target.password.value })); enter(); }
+    catch (er) { $("#aerr").textContent = er.message; btn.disabled = false; } };
+}
+$("#logout").onclick = async () => { await fetch("/api/auth/logout", { method: "POST" }).catch(() => {}); loginView(); };
 async function route() {
+  if (STATE.auth && !STATE.user) return;   // the login screen stays until someone signs in
   killCharts();
   STATE.poll = null;     // stop any screener polling that belongs to the page we are leaving
   view.onclick = null;   // views attach their own delegated handler; don't let one leak into the next page
@@ -485,7 +569,7 @@ async function portfolioView() {
   spin("Loading portfolio…");
   const p = await api("/api/portfolio"), T = p.totals, pre = JSON.parse(sessionStorage.getItem("prefill") || "null");
   sessionStorage.removeItem("prefill");
-  view.innerHTML = `<h2>Portfolio &amp; decision journal</h2><p class="sub">Record every buy with the reason. The honest test of a stock-picker: are you beating a plain Nifty 50 index fund? Data stays on this computer.</p>
+  view.innerHTML = `<h2>Portfolio &amp; decision journal</h2><p class="sub">Record every buy with the reason. The honest test of a stock-picker: are you beating a plain Nifty 50 index fund? ${STATE.auth ? "Saved to your account." : "Data stays on this computer."}</p>
   ${p.warnings.map(w => `<div class="warn">${esc(w)}</div>`).join("")}
   ${p.holdings.length ? `<div class="grid g4" style="margin-bottom:14px">
     <div class="card stat"><div class="l">Invested</div><div class="v">${money(T.invested)}</div></div>
@@ -504,7 +588,7 @@ async function portfolioView() {
   ${p.holdings.map(h => h.error ? `<tr><td>${esc(h.symbol)}</td><td colspan="10" class="neg">${esc(h.error)}</td></tr>` : `<tr><td><a href="#/stock/${encodeURIComponent(h.symbol)}" style="color:var(--text)"><b>${esc(h.symbol.replace(".NS", ""))}</b></a><div class="muted">${esc(h.date)}</div></td><td>${num(h.qty, 0)}</td><td>${num(h.price)}</td><td>${num(h.current)}</td><td>${money(h.value)}</td>
   <td>${spct(h.pnl_pct)}</td><td>${spct(h.alpha)}</td><td>${pct(h.weight, 0)}</td><td>${sigBadge(h.signals.long)}</td><td style="white-space:normal;max-width:260px" class="muted">${esc(h.note)}</td><td><button class="link" data-del="${h.id}">delete</button></td></tr>`).join("")}</tbody></table></div><p class="note">${esc(p.note)}</p>` : `<div class="card neu">No holdings yet.</div>`}`;
   $("#pf").onsubmit = async e => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.target));
-    try { await api("/api/portfolio", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) }); portfolioView(); } catch (er) { alert(er.message); } };
+    try { await api("/api/portfolio", post(f)); portfolioView(); } catch (er) { if (!er.auth) alert(er.message); } };
   view.onclick = async e => { const id = e.target.dataset.del; if (id && confirm("Delete this entry?")) { await api("/api/portfolio/" + id, { method: "DELETE" }); portfolioView(); } };
 }
 
